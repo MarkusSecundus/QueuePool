@@ -3,15 +3,11 @@
 
 
 
-
-using byte_t = unsigned char;
-using buffersize_t = std::size_t;
-using segment_id_t = std::uint32_t;
-
+#pragma region LinkedListManipulation
 
 
 template<typename TAccessPolicy, typename TNode>
-concept linked_list_helper_access_policy = requires(TAccessPolicy pol, TNode a, TNode b)
+concept linked_list_manipulator_access_policy = requires(TAccessPolicy pol, TNode a, TNode b)
 {
     {pol.get_next(a)} -> std::convertible_to<TNode>;
     {pol.get_last(a)} -> std::convertible_to<TNode>;
@@ -20,44 +16,48 @@ concept linked_list_helper_access_policy = requires(TAccessPolicy pol, TNode a, 
     {pol.is_same_node(a, b)} ->std::convertible_to<bool>;
 };
 
-template<typename TNode, linked_list_helper_access_policy<TNode> TNodeAccessPolicy>
-struct linked_list_helper_t : private TNodeAccessPolicy{
+template<typename TNode, linked_list_manipulator_access_policy<TNode> TNodeAccessPolicy>
+struct linked_list_manipulator_t : private TNodeAccessPolicy {
 
     template<typename ...Args>
-    linked_list_helper_t(Args ...args): TNodeAccessPolicy(args...){}
+    linked_list_manipulator_t(Args ...args) : TNodeAccessPolicy(args...) {}
 
     TNode init_single_node(TNode a) {
-        p()->set_next(a, a);
-        p()->set_last(a, a);
+        TNodeAccessPolicy& p(accessor_policy());
+        p.set_next(a, a);
+        p.set_last(a, a);
         return a;
     }
 
 
     void append_list(TNode n, TNode to_append) {
-        if (p()->is_same_node(n, to_append))
+        TNodeAccessPolicy& p(accessor_policy());
+        if (p.is_same_node(n, to_append))
             return;
 
-        TNode n_next = p()->get_next(n);
-        TNode n_last = p()->get_last(n);
-        TNode to_append_next = p()->get_next(to_append);
-        TNode to_append_last = p()->get_last(to_append);
-        
-        p()->set_next(n, to_append);
-        p()->set_last(to_append, n);
-        p()->set_next(to_append_last, n_next);
-        p()->set_last(n_next, to_append_last);
+        TNode n_next = p.get_next(n);
+        TNode n_last = p.get_last(n);
+        TNode to_append_next = p.get_next(to_append);
+        TNode to_append_last = p.get_last(to_append);
+
+        p.set_next(n, to_append);
+        p.set_last(to_append, n);
+        p.set_next(to_append_last, n_next);
+        p.set_last(n_next, to_append_last);
     }
 
     void concat_lists(TNode a, TNode b) {
-        append_list(p()->get_next(a), b);
+        TNodeAccessPolicy& p(accessor_policy());
+        append_list(p.get_next(a), b);
     }
 
     TNode disconnect_node(TNode a) {
-        TNode last = p()->get_last(a);
-        TNode next = p()->get_next(a);
+        TNodeAccessPolicy& p(accessor_policy());
+        TNode last = p.get_last(a);
+        TNode next = p.get_next(a);
 
-        p()->set_next(last, next);
-        p()->set_last(next, last);
+        p.set_next(last, next);
+        p.set_last(next, last);
 
         init_single_node(a);
 
@@ -65,31 +65,112 @@ struct linked_list_helper_t : private TNodeAccessPolicy{
     }
 
     bool is_single_node(TNode a) {
-        return p()->is_same_node(a, p()->get_next(a));
+        TNodeAccessPolicy& p(accessor_policy());
+        return p.is_same_node(a, p.get_next(a));
     }
 
     bool is_valid_list(TNode a) {
+        TNodeAccessPolicy& p(accessor_policy());
         bool ret = true;
         foreach(a, [&](TNode a) {
-            if (!p()->is_same_node(a, p()->get_last(p()->get_next(a)))) ret = false;
-            if (!p()->is_same_node(a, p()->get_next(p()->get_last(a)))) ret = false;
-        });
+            if (!p.is_same_node(a, p.get_last(p.get_next(a)))) ret = false;
+            if (!p.is_same_node(a, p.get_next(p.get_last(a)))) ret = false;
+            });
         return ret;
     }
 
 
     template<typename TFunc>
     void foreach(TNode begin, TFunc iteration) {
+        TNodeAccessPolicy& p(accessor_policy());
         TNode a = begin;
         do {
             iteration(a);
-            a = p()->get_next(a);
-        } while (!p()->is_same_node(a, begin));
+            a = p.get_next(a);
+        } while (!p.is_same_node(a, begin));
     }
 
 private:
-    TNodeAccessPolicy* p() { return static_cast<TNodeAccessPolicy*>(this); }
+    TNodeAccessPolicy& accessor_policy() { return *static_cast<TNodeAccessPolicy*>(this); }
 };
+
+
+#pragma region LinkedListManipulationTest
+
+namespace linked_list_manipulation_tests {
+
+    struct LinkedListNode {
+        LinkedListNode* next, * last;
+        int value;
+
+        using n = LinkedListNode*;
+
+        struct policy {
+            n get_next(n a) { return a->next; }
+            n get_last(n a) { return a->last; }
+            void set_next(n node, n to_set) { node->next = to_set; }
+            void set_last(n node, n to_set) { node->last = to_set; }
+            bool is_same_node(n a, n b) { return a == b; }
+        };
+
+        struct policy_reversed {
+            n get_next(n a) { return a->last; }
+            n get_last(n a) { return a->next; }
+            void set_next(n node, n to_set) { node->last = to_set; }
+            void set_last(n node, n to_set) { node->next = to_set; }
+            bool is_same_node(n a, n b) { return a == b; }
+        };
+    };
+
+    void ll_test() {
+        LinkedListNode a, b, c, d;
+        linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy> h;
+        linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;
+
+        a.value = 10; h.init_single_node(&a);
+        b.value = 11; h.init_single_node(&b);
+        c.value = 12; h.init_single_node(&c);
+        d.value = 13; h.init_single_node(&d);
+
+#define TEST_PRINT(n) printf("it %d(" #n "): ", h.is_valid_list(&n)); h.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | "); h2.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
+
+        TEST_PRINT(a);
+        h.disconnect_node(&a);
+        TEST_PRINT(a);
+        h.concat_lists(&a, &b);
+        TEST_PRINT(a);
+        h.concat_lists(&c, &d);
+        TEST_PRINT(c);
+        h.concat_lists(&a, &c);
+        TEST_PRINT(a);
+
+        h.disconnect_node(&a);
+        TEST_PRINT(a);
+        TEST_PRINT(b);
+        h.disconnect_node(&c);
+        TEST_PRINT(c);
+        TEST_PRINT(b);
+        h.disconnect_node(&b);
+        TEST_PRINT(d);
+        TEST_PRINT(b);
+
+#undef TEST_PRINT
+    }
+}
+
+#pragma endregion
+
+
+#pragma endregion
+
+
+
+using byte_t = unsigned char;
+using buffersize_t = std::size_t;
+using segment_id_t = std::uint32_t;
+
+
+
 
 
 
@@ -208,9 +289,9 @@ using THeaderPolicy = standard_header_policy_t;
 template<buffersize_t segment_alignment=20>
 struct queue_pool_t{
 public:
-    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
+    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size), ll_helper(this) {
         auto free_list = get_free_list();;
-        init_header_list(free_list);
+        ll_helper.init_single_node(free_list);
         free_list.set_is_free_segment(true);
         free_list.set_segment_begin(0);
         free_list.set_segment_length(get_buffer_size());
@@ -254,109 +335,32 @@ private:
         }
     }
 
+    struct header_list_access_policy {
+    public:
+        header_list_access_policy(queue_pool_t *pool_):pool(pool_){}
 
-    header_view_t init_header_list(header_view_t v) {
-        v.set_next_segment_id(v.get_segment_id());
-        v.set_last_segment_id(v.get_segment_id());
-        return v;
-    }
+        header_view_t get_next(header_view_t a) { return pool->get_header(a.get_next_segment_id()); }
+        header_view_t get_last(header_view_t a) { return pool->get_header(a.get_last_segment_id()); }
+        void set_next(header_view_t node, header_view_t to_set) { node.set_next_segment_id(to_set.get_segment_id()); }
+        void set_last(header_view_t node, header_view_t to_set) { node.set_last_segment_id(to_set.get_segment_id()); }
+        bool is_same_node(header_view_t a, header_view_t b) { return a.get_segment_id() == b.get_segment_id(); }
+    private:
+        queue_pool_t *pool;
+    };
+    linked_list_manipulator_t<header_view_t, header_list_access_policy> ll_helper;
 
-    void concat_header_lists(header_view_t a, header_view_t b) {
-        if (a.get_segment_id() == b.get_segment_id())
-            return;
-
-        auto a_next = get_header(a.get_next_segment_id());
-        auto a_last = get_header(a.get_last_segment_id());
-        auto b_next = get_header(b.get_next_segment_id());
-        auto b_last = get_header(b.get_last_segment_id());
-
-
-        a.set_last_segment_id(b_last.get_segment_id());
-        b_last.set_next_segment_id(a.get_segment_id());
-
-    }
-
-    header_view_t remove_header_list_node(header_view_t a) {
-        auto last = get_header(a.get_last_segment_id());
-        auto next = get_header(a.get_next_segment_id());
-
-        last.set_next_segment_id(next.get_segment_id());
-        next.set_last_segment_id(last.get_segment_id());
-
-        init_header_list(a);
-
-        return next;
-    }
-
-    bool header_is_single_node_list(header_view_t header) {
-        return header.get_segment_id() == header.get_next_segment_id();
-    }
 
 };
 
 
-struct LinkedListNode {
-    LinkedListNode* next, *last;
-    int value;
 
-    using n = LinkedListNode*;
 
-    struct policy {
-        n get_next(n a) { return a->next; }
-        n get_last(n a) { return a->last; }
-        void set_next(n node, n to_set) { node->next = to_set; }
-        void set_last(n node, n to_set) { node->last = to_set; }
-        bool is_same_node(n a, n b) { return a == b; }
-    };
 
-    struct policy_reversed {
-        n get_next(n a) { return a->last; }
-        n get_last(n a) { return a->next; }
-        void set_next(n node, n to_set) { node->last = to_set; }
-        void set_last(n node, n to_set) { node->next = to_set; }
-        bool is_same_node(n a, n b) { return a == b; }
-    };
-};
-
-void ll_test() {
-    LinkedListNode a, b, c, d;
-    linked_list_helper_t<LinkedListNode*, LinkedListNode::policy> h;
-    linked_list_helper_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;
-
-    a.value = 10; h.init_single_node(&a);
-    b.value = 11; h.init_single_node(&b);
-    c.value = 12; h.init_single_node(&c);
-    d.value = 13; h.init_single_node(&d);
-
-#define TEST_PRINT(n) printf("it %d(" #n "): ", h.is_valid_list(&n)); h.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
-
-    TEST_PRINT(a);
-    h.disconnect_node(&a);
-    TEST_PRINT(a);
-    h.concat_lists(&a, &b);
-    TEST_PRINT(a);
-    h.concat_lists(&c, &d);
-    TEST_PRINT(c);
-    h.concat_lists(&a, &c);
-    TEST_PRINT(a);
-
-    h.disconnect_node(&a);
-    TEST_PRINT(a);
-    TEST_PRINT(b);
-    h.disconnect_node(&c);
-    TEST_PRINT(c);
-    TEST_PRINT(b);
-    h.disconnect_node(&b);
-    TEST_PRINT(d);
-    TEST_PRINT(b);
-
-#undef TEST_PRINT
-}
 
 
 int main(){
 
-    ll_test();
+    linked_list_manipulation_tests::ll_test();
     return 0;
 
     byte_t buffer[1024];
