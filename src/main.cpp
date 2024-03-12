@@ -1,5 +1,6 @@
 #include<iostream>
 #include<cstddef>
+#include<exception>
 
 
 
@@ -39,7 +40,7 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
     }
 
 
-    void append_list(TNode n, TNode to_append) {
+    void insert_list(TNode n, TNode to_append) {
         TNodeAccessPolicy& p(accessor_policy());
         if (p.is_same_node(n, to_append))
             return;
@@ -55,9 +56,34 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
         p.set_last(n_next, to_append_last);
     }
 
-    void concat_lists(TNode a, TNode b) {
+    void prepend_list(TNode a, TNode b) {
         TNodeAccessPolicy& p(accessor_policy());
-        append_list(p.get_last(a), b);
+        insert_list(p.get_last(a), b);
+    }
+
+    void swap_nodes(TNode a, TNode b) {
+        TNodeAccessPolicy& p(accessor_policy());
+        
+        bool a_is_single = is_single_node(a);
+        bool b_is_single = is_single_node(b);
+
+        TNode a_next = p.get_next(a);
+        TNode a_last = p.get_last(a);
+        TNode b_next = p.get_next(b);
+        TNode b_last = p.get_last(b);
+    
+        p.set_next(a, b_next);
+        p.set_last(b_next, a);
+        p.set_last(a, b_last);
+        p.set_next(b_last, a);
+    
+        p.set_next(b, a_next);
+        p.set_last(a_next, b);
+        p.set_last(b, a_last);
+        p.set_next(a_last, b);
+
+        if (a_is_single) init_node(b);
+        if (b_is_single) init_node(a);
     }
 
     TNode disconnect_node(TNode a) {
@@ -98,11 +124,15 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
     template<typename TFunc>
     void for_each(TNode begin, TFunc iteration) {
         TNodeAccessPolicy& p(accessor_policy());
-        TNode a = begin;
-        do {
+
+        TNode a = begin, last = p.get_last(begin);
+        for (;;) {
+            TNode next = p.get_next(a); //must fetch before iteration() makes some potentiall destructive changes
             iteration(a);
-            a = p.get_next(a);
-        } while (!p.is_same_node(a, begin));
+            if (p.is_same_node(a, last)) //a destructive change might occur on begin meaning we might not come back to the start, but we are still guaranteed to reach the very last element of the list at some point 
+                break; 
+            a = next;
+        }
     }
 
 private:
@@ -138,7 +168,7 @@ namespace linked_list_manipulation_tests {
     };
 
     void ll_test() {
-        LinkedListNode a, b, c, d;
+        LinkedListNode a, b, c, d, e, f, g;
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy> h;
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;
 
@@ -146,17 +176,21 @@ namespace linked_list_manipulation_tests {
         b.value = 11; h.init_node(&b);
         c.value = 12; h.init_node(&c);
         d.value = 13; h.init_node(&d);
+        e.value = 14; h.init_node(&e);
+        f.value = 15; h.init_node(&f);
+        g.value = 16; h.init_node(&g);
 
-#define TEST_PRINT(n) printf("it %d(" #n "): ", h.validate_list(&n)); h.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | "); h2.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
+#define TEST_PRINT(n) printf("it %d(" #n "): ", h.validate_list(&n)); printf("<%lld> ", h.length(&n)); h.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | <%lld> ", h2.length(&n)); h2.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
 
         TEST_PRINT(a);
         h.disconnect_node(&a);
         TEST_PRINT(a);
-        h.concat_lists(&a, &b);
+        h.prepend_list(&a, &b);
         TEST_PRINT(a);
-        h.concat_lists(&c, &d);
+        h.prepend_list(&c, &d);
+        h.prepend_list(&c, &e);
         TEST_PRINT(c);
-        h.concat_lists(&a, &c);
+        h.prepend_list(&a, &c);
         TEST_PRINT(a);
 
         h.disconnect_node(&a);
@@ -168,6 +202,50 @@ namespace linked_list_manipulation_tests {
         h.disconnect_node(&b);
         TEST_PRINT(d);
         TEST_PRINT(b);
+        h.disconnect_node(&d);
+        TEST_PRINT(d);
+
+        printf("reconnecting!...\n");
+        h.prepend_list(&a, &b);
+        h.prepend_list(&a, &c);
+        h.prepend_list(&d, &e);
+        h.prepend_list(&a, &d);
+        TEST_PRINT(a);
+        TEST_PRINT(b);
+        TEST_PRINT(c);
+        TEST_PRINT(d);
+        TEST_PRINT(e);
+        //return;
+        printf("disconnecting!...\n");
+        h.for_each(&a, [&](LinkedListNode* n) {h.disconnect_node(n); printf("%d, ", n->value); }); printf("\n");
+        TEST_PRINT(a);
+        TEST_PRINT(b);
+        TEST_PRINT(c);
+        TEST_PRINT(d);
+        TEST_PRINT(e);
+
+        printf("swapping preparation...\n");
+        h.prepend_list(&a, &b);
+        h.prepend_list(&a, &c);
+        h.prepend_list(&d, &e);
+        TEST_PRINT(a);
+        TEST_PRINT(d);
+        printf("swapping!...\n");
+        h.swap_nodes(&a, &d);
+        TEST_PRINT(a);
+        TEST_PRINT(d);
+        printf("more swapping!...\n");
+        h.swap_nodes(&a, &f);
+        TEST_PRINT(a);
+        TEST_PRINT(f);
+        h.swap_nodes(&d, &g);
+        TEST_PRINT(d);
+        TEST_PRINT(g);
+        h.swap_nodes(&a, &d);
+        TEST_PRINT(a);
+        TEST_PRINT(d);
+
+
 
 #undef TEST_PRINT
     }
@@ -187,6 +265,7 @@ using segment_id_t = std::uint32_t;
 
 
 
+#pragma region MemoryPolicy
 
 template<typename THeaderView>
 concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer)
@@ -319,9 +398,11 @@ struct standard_memory_policy {
     };
 };
 
+#pragma endregion
 
 
 
+struct QueuePoolTest;
 
 template<memory_policy TMemoryPolicy=standard_memory_policy<20>>
 struct queue_pool_t{
@@ -332,11 +413,7 @@ public:
 
 
     queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
-        auto free_list = get_free_list();;
-        ll().init_node(free_list);
-        free_list.set_is_free_segment(true);
-        free_list.set_segment_begin(0);
-        free_list.set_segment_length(get_buffer_size());
+        *get_free_list_id_ptr() = init_free_list();
     }
 
     queue_handle_t make_queue() {
@@ -353,29 +430,74 @@ public:
 
 private:
     using header_view_t = typename TMemoryPolicy::segment_header_view_t;
-    static constexpr buffersize_t segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
+    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
     byte_t* buffer_raw;
     buffersize_t buffer_size_raw;
-    segment_id_t free_list_id = 0;
+
 
     byte_t* get_buffer() { return buffer_raw; }
     buffersize_t get_buffer_size() { return buffer_size_raw; }
+    buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_segment_alignment(); }
 
-    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * segment_alignment()]); }
+    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_segment_alignment()]); }
+    segment_id_t get_max_segment_id() { return get_buffer_size() / get_segment_alignment() ; }
+
     header_view_t get_header(segment_id_t segment_index) { return header_view_t(get_segment_start(segment_index), segment_index); }
+
+
+
+    segment_id_t free_list_id___ = 0;
+    segment_id_t* get_free_list_id_ptr() { return &free_list_id___; }
+
+    segment_id_t init_free_list() {
+        header_view_t free_list = get_header(0);
+        ll().init_node(free_list);
+        free_list.set_is_free_segment(true);
+        free_list.set_segment_begin(0);
+        free_list.set_segment_length(get_allocatable_buffer_size());
+        return free_list.get_segment_id();
+    }
     header_view_t get_free_list() {
-        header_view_t ret = get_header(free_list_id);
+        header_view_t ret = get_header(*get_free_list_id_ptr());
         return ret;
     }
     header_view_t alloc_segment_from_free_list() {
         auto free_list = get_free_list();
         if (!free_list.get_is_free_segment())
             return header_view_t::invalid();
+        
 
-        if (free_list.get_segment_length() < segment_alignment) {
-            
+        if (free_list.get_segment_begin() != 0) throw std::runtime_error("This should not happen!");
+
+        auto ret = free_list;
+        buffersize_t free_list_remaining = free_list.get_segment_length() - get_segment_alignment();
+        if (free_list_remaining < 0) 
+            return header_view_t::invalid();
+        
+        if (free_list_remaining == 0) {
+            if(ll().is_single_node(free_list)){}
+            else {
+                auto next_free_segment = ll().next(free_list);
+                ll().disconnect_node(free_list);
+                *get_free_list_id_ptr() = next_free_segment.get_segment_id();
+            }
         }
+        else {
+            auto next_part_of_this_continuous_segment = get_header(free_list.get_segment_id() + 1);
+            next_part_of_this_continuous_segment.set_is_free_segment(true);
+            next_part_of_this_continuous_segment.set_segment_begin(0);
+            next_part_of_this_continuous_segment.set_segment_length(free_list_remaining);
+
+            ll().init_node(next_part_of_this_continuous_segment);
+            ll().swap_nodes(free_list, next_part_of_this_continuous_segment);
+            *get_free_list_id_ptr() = next_part_of_this_continuous_segment.get_segment_id();
+        }
+        ret.set_is_free_segment(false);
+        ret.set_segment_begin(0);
+        ret.set_segment_length(0);
+        ll().init_node(ret);
+        return ret;
     }
 
     struct header_list_access_policy {
@@ -392,11 +514,28 @@ private:
     };
     auto ll() { return linked_list_manipulator_t<header_view_t, header_list_access_policy>(this); };
 
-
+    friend QueuePoolTest;
 };
 
 
 
+
+
+struct QueuePoolTest {
+    static void test_allocation_only() {
+        constexpr int BUFFER_SIZE = 2048;
+        byte_t buffer[BUFFER_SIZE];
+
+        queue_pool_t<standard_memory_policy<20>> pool(buffer, BUFFER_SIZE);
+
+        while (true) {
+            auto allocated = pool.alloc_segment_from_free_list();
+            if (!allocated.is_valid())
+                break;
+            printf("is_free: %d, id: %3lld, next: %lld, last: %lld, begin: %lld, length: %lld,  data: %p\n", allocated.get_is_free_segment(), allocated.get_segment_id(), allocated.get_next_segment_id(), allocated.get_last_segment_id(), allocated.get_segment_begin(), allocated.get_segment_length(), allocated.get_segment_data());
+        }
+    }
+};
 
 
 
@@ -405,7 +544,7 @@ int main(){
 
     linked_list_manipulation_tests::ll_test();
 
-    byte_t buffer[1024];
+    byte_t buffer[20];
 
     auto h = standard_memory_policy<20>::segment_header_view_t(buffer, 0);
     
@@ -415,12 +554,13 @@ int main(){
     h.set_segment_length(0x122);
     h.set_segment_begin(0x1122);
     
-    printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
+    printf("next: %x, last: %x, length: %x, begin: %x, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
     
-    
-    queue_pool_t<standard_memory_policy<20>> pool(buffer, 1024);
+    printf("\n\n");
+
+    QueuePoolTest::test_allocation_only();
 
 
-    printf("Hello world!\n");
+    printf("\n\nFinished\n");
     return 0;
 }
