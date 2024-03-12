@@ -284,12 +284,17 @@ concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffers
     {pol.get_segment_length()} -> std::convertible_to<buffersize_t>;
     {pol.set_segment_length(buffersize)} -> std::convertible_to<void>;
 
+    {pol.get_segment_end()} -> std::convertible_to<buffersize_t>;
+
     {pol.get_is_free_segment()} -> std::convertible_to<bool>;
     {pol.set_is_free_segment(flag)} -> std::convertible_to<void>;
 
     {pol.get_segment_data()} -> std::convertible_to<byte_t*>;
     {pol.get_segment_id()} -> std::convertible_to<segment_id_t>;
     {pol.is_valid()} -> std::convertible_to<bool>;
+
+    {pol.get_segment_data_raw()} -> std::convertible_to<byte_t*>;
+    {pol.get_segment_length_raw()} -> std::convertible_to<buffersize_t>;
 
     {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
 };
@@ -351,6 +356,8 @@ struct standard_memory_policy {
             auto packed = get_header();
             return packed->segment_length_lower | (packed->segment_length_upper << 8);
         }
+        buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length();}
+
         void set_segment_length(buffersize_t value) {
             auto packed = get_header();
             packed->segment_length_lower = (byte_t)(value & 0xFF);
@@ -362,6 +369,10 @@ struct standard_memory_policy {
         byte_t* get_segment_data() { return header_ptr_raw + get_header_size_bytes(); }
 
         segment_id_t get_segment_id() { return segment_id; }
+
+        byte_t* get_segment_data_raw() { return header_ptr_raw; }
+        buffersize_t get_segment_length_raw() { return get_segment_end() + get_header_size_bytes(); }
+
 
         bool is_valid() { return (bool)header_ptr_raw; }
         static segment_header_view_t invalid() { return segment_header_view_t(NULL, 0); }
@@ -406,9 +417,6 @@ struct QueuePoolTest;
 
 template<memory_policy TMemoryPolicy=standard_memory_policy<20>>
 struct queue_pool_t{
-private:
-    using header_view_t = typename TMemoryPolicy::segment_header_view_t;
-    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
@@ -418,6 +426,7 @@ public:
         segment_id_t get_segment_id()const { return segment_id; }
 
         static constexpr queue_handle_t uninitialized() { return queue_handle_t(~0); }
+        static constexpr queue_handle_t error() { return queue_handle_t(~0); }
         static constexpr queue_handle_t empty() { return queue_handle_t((segment_id_t)(std::size_t)(~0) - 1); }
 
 
@@ -473,6 +482,8 @@ public:
 
 
 private:
+    using header_view_t = typename TMemoryPolicy::segment_header_view_t;
+    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
     byte_t* buffer_raw;
     buffersize_t buffer_size_raw;
@@ -485,7 +496,10 @@ private:
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_segment_alignment()]); }
     segment_id_t get_max_segment_id() { return (segment_id_t)(get_buffer_size() / get_segment_alignment() ); }
 
-    header_view_t get_header(segment_id_t segment_index) { return header_view_t(get_segment_start(segment_index), segment_index); }
+    header_view_t get_header(segment_id_t segment_index) {
+        if(segment_index < 0 || segment_index >= get_max_segment_id()) return header_view_t::invalid();
+        return header_view_t(get_segment_start(segment_index), segment_index); 
+    }
 
 
 
@@ -515,7 +529,7 @@ private:
             return header_view_t::invalid();
         
         if (free_list_remaining == 0) {
-            if(ll().is_single_node(free_list)){}
+            if (ll().is_single_node(free_list)) {} //nothing special to do here - the segment will in any case get marked as non-free and that will be the end of free list
             else {
                 auto next_free_segment = ll().next(free_list);
                 ll().disconnect_node(free_list);
@@ -523,14 +537,10 @@ private:
             }
         }
         else {
-            auto next_part_of_this_continuous_segment = get_header(free_list.get_segment_id() + 1);
-            next_part_of_this_continuous_segment.set_is_free_segment(true);
-            next_part_of_this_continuous_segment.set_segment_begin(0);
-            next_part_of_this_continuous_segment.set_segment_length(free_list_remaining);
+            free_list.set_segment_begin(get_segment_alignment());
+            free_list.set_segment_length(free_list.get_segment_length() - get_segment_alignment());
 
-            ll().init_node(next_part_of_this_continuous_segment);
-            ll().swap_nodes(free_list, next_part_of_this_continuous_segment);
-            *get_free_list_id_ptr() = next_part_of_this_continuous_segment.get_segment_id();
+            *get_free_list_id_ptr() = shrink_segment_from_left_according_to_its_begin(free_list).get_segment_id();
         }
         ret.set_is_free_segment(false);
         ret.set_segment_begin(0);
@@ -539,9 +549,57 @@ private:
         return ret;
     }
 
+    header_view_t shrink_segment_from_left_according_to_its_begin(header_view_t h) {
+        auto begin = h.get_segment_begin();
+        int segments_count = begin / get_segment_alignment();
+        if(segments_count <= 0)
+            return h;
+        int bytes_count = segments_count * get_segment_alignment();
+
+        auto next_part_of_this_continuous_segment = get_header(h.get_segment_id() + segments_count);
+        next_part_of_this_continuous_segment.set_segment_begin(begin - bytes_count);
+        next_part_of_this_continuous_segment.set_segment_length(h.get_segment_length());
+        next_part_of_this_continuous_segment.set_is_free_segment(h.get_is_free_segment());
+
+        ll().init_node(next_part_of_this_continuous_segment);
+        ll().swap_nodes(h, next_part_of_this_continuous_segment);
+
+        return next_part_of_this_continuous_segment;
+    }
 
 
+    header_view_t try_grow_queue_by_1(header_view_t queue_head){
+        if(!queue_head.is_valid()){
+            auto ret = alloc_segment_from_free_list();
+            if(!ret.is_valid()) return header_view_t::invalid();
+            ret.set_segment_length(1);
+            return ret;
+        }
 
+        auto queue_tail = ll().last(queue_head);
+
+        if((queue_tail.get_segment_end()/get_segment_alignment()) == ((queue_tail.get_segment_end() + 1)/get_segment_alignment())){
+            queue_tail.set_segment_length(queue_tail.get_segment_length()+1);
+            return queue_head;
+        }
+
+        auto next_block = get_header(queue_tail.get_segment_id() + 1);
+        if(next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_end() >= get_segment_alignment()){
+            next_block.set_segment_begin(get_segment_alignment());
+            next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
+            auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
+            if(next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
+            
+            queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
+            return queue_head;
+        }else{
+            auto new_block = alloc_segment_from_free_list();
+            if(!new_block.is_valid()) return header_view_t::invalid();
+            new_block.set_segment_begin(0);
+            new_block.set_segment_length(1);
+            ll().insert_list(queue_tail, new_block);
+        }
+    }
 
 
 
@@ -570,10 +628,10 @@ private:
 
 struct QueuePoolTest {
     static void test_allocation_only() {
-        constexpr int BUFFER_SIZE = 1920;
+        constexpr int BUFFER_SIZE = 512;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<20>>;
+        using pool_t = queue_pool_t<standard_memory_policy<32>>;
 
         pool_t pool(buffer, BUFFER_SIZE);
 
@@ -590,6 +648,7 @@ struct QueuePoolTest {
         auto q = pool.make_queue();
         byte_t byte;
         std::cout << pool.try_peek_byte(&q, &byte) <<"\n";
+        std::cout << pool.try_grow_queue_by_1(pool.get_header(0)).get_segment_id() <<"\n";
     }
 };
 
