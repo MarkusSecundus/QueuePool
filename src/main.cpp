@@ -22,11 +22,20 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
     template<typename ...Args>
     linked_list_manipulator_t(Args ...args) : TNodeAccessPolicy(args...) {}
 
-    TNode init_single_node(TNode a) {
+    TNode init_node(TNode a) {
         TNodeAccessPolicy& p(accessor_policy());
         p.set_next(a, a);
         p.set_last(a, a);
         return a;
+    }
+
+    TNode next(TNode n) {
+        TNodeAccessPolicy& p(accessor_policy());
+        return p.get_next(n);
+    }
+    TNode last(TNode n) {
+        TNodeAccessPolicy& p(accessor_policy());
+        return p.get_last(n);
     }
 
 
@@ -48,7 +57,7 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
 
     void concat_lists(TNode a, TNode b) {
         TNodeAccessPolicy& p(accessor_policy());
-        append_list(p.get_next(a), b);
+        append_list(p.get_last(a), b);
     }
 
     TNode disconnect_node(TNode a) {
@@ -59,7 +68,7 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
         p.set_next(last, next);
         p.set_last(next, last);
 
-        init_single_node(a);
+        init_node(a);
 
         return next;
     }
@@ -69,10 +78,16 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
         return p.is_same_node(a, p.get_next(a));
     }
 
-    bool is_valid_list(TNode a) {
+    std::size_t length(TNode a) {
+        std::size_t ret = 0;
+        for_each(a, [&](TNode n) {++ret; });
+        return ret;
+    }
+
+    bool validate_list(TNode a) {
         TNodeAccessPolicy& p(accessor_policy());
         bool ret = true;
-        foreach(a, [&](TNode a) {
+        for_each(a, [&](TNode a) {
             if (!p.is_same_node(a, p.get_last(p.get_next(a)))) ret = false;
             if (!p.is_same_node(a, p.get_next(p.get_last(a)))) ret = false;
             });
@@ -81,7 +96,7 @@ struct linked_list_manipulator_t : private TNodeAccessPolicy {
 
 
     template<typename TFunc>
-    void foreach(TNode begin, TFunc iteration) {
+    void for_each(TNode begin, TFunc iteration) {
         TNodeAccessPolicy& p(accessor_policy());
         TNode a = begin;
         do {
@@ -127,12 +142,12 @@ namespace linked_list_manipulation_tests {
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy> h;
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;
 
-        a.value = 10; h.init_single_node(&a);
-        b.value = 11; h.init_single_node(&b);
-        c.value = 12; h.init_single_node(&c);
-        d.value = 13; h.init_single_node(&d);
+        a.value = 10; h.init_node(&a);
+        b.value = 11; h.init_node(&b);
+        c.value = 12; h.init_node(&c);
+        d.value = 13; h.init_node(&d);
 
-#define TEST_PRINT(n) printf("it %d(" #n "): ", h.is_valid_list(&n)); h.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | "); h2.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
+#define TEST_PRINT(n) printf("it %d(" #n "): ", h.validate_list(&n)); h.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | "); h2.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
 
         TEST_PRINT(a);
         h.disconnect_node(&a);
@@ -200,19 +215,23 @@ concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffers
     {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
 };
 template<typename THeaderPolicy>
-concept header_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
+concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
     {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<int>;
-    {THeaderPolicy::get_header_size_bits()} -> std::convertible_to<std::size_t>;
-} && header_view<typename THeaderPolicy::segment_header_view_t>;
+    {THeaderPolicy::get_segment_alignment()} -> std::convertible_to<buffersize_t>;
+} && header_view<typename THeaderPolicy::segment_header_view_t> 
+  && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
 
-struct standard_header_policy_t {
+
+template<buffersize_t SEGMENT_ALIGNMENT>
+struct standard_memory_policy {
     static constexpr int get_header_size_bytes() { return sizeof(segment_header_view_t::packed_header_t); }
-    static constexpr std::size_t get_header_size_bits() { return get_header_size_bytes() * 8; }
+    static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
 
+    using segment_id_t = std::uint8_t;
 
     struct segment_header_view_t {
     public:
-        friend standard_header_policy_t;
+        friend standard_memory_policy;
         segment_header_view_t(byte_t* segment_start, segment_id_t segment_index) : header_ptr_raw(segment_start), segment_id(segment_index){}
 
         segment_id_t get_next_segment_id() { return get_header()->next_segment; }
@@ -301,27 +320,20 @@ struct standard_header_policy_t {
 };
 
 
-struct queue_handle_t {
-    queue_handle_t(buffersize_t segment_id_): segment_id(segment_id_){}
-
-    segment_id_t segment_id;
-
-    static queue_handle_t empty() { return queue_handle_t(~0 + 1); }
-    static queue_handle_t uninitialized(){ return queue_handle_t(~0); }
-    bool is_empty() { return segment_id == (~0 + 1); }
-    bool is_uninitialized() { return segment_id == ~0; }
-
-};
-static_assert(sizeof(queue_handle_t) == sizeof(segment_id_t), "");
 
 
 
-template<header_policy THeaderPolicy=standard_header_policy_t, buffersize_t segment_alignment=20>
+template<memory_policy TMemoryPolicy=standard_memory_policy<20>>
 struct queue_pool_t{
 public:
-    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size), ll_helper(this) {
+    using segment_id_t = TMemoryPolicy::segment_id_t;
+    using queue_handle_t = segment_id_t;
+
+
+
+    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
         auto free_list = get_free_list();;
-        ll_helper.init_single_node(free_list);
+        ll().init_node(free_list);
         free_list.set_is_free_segment(true);
         free_list.set_segment_begin(0);
         free_list.set_segment_length(get_buffer_size());
@@ -340,7 +352,8 @@ public:
 
 
 private:
-    using header_view_t = typename THeaderPolicy::segment_header_view_t;
+    using header_view_t = typename TMemoryPolicy::segment_header_view_t;
+    static constexpr buffersize_t segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
     byte_t* buffer_raw;
     buffersize_t buffer_size_raw;
@@ -349,7 +362,7 @@ private:
     byte_t* get_buffer() { return buffer_raw; }
     buffersize_t get_buffer_size() { return buffer_size_raw; }
 
-    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * segment_alignment]); }
+    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * segment_alignment()]); }
     header_view_t get_header(segment_id_t segment_index) { return header_view_t(get_segment_start(segment_index), segment_index); }
     header_view_t get_free_list() {
         header_view_t ret = get_header(free_list_id);
@@ -377,7 +390,7 @@ private:
     private:
         queue_pool_t *pool;
     };
-    linked_list_manipulator_t<header_view_t, header_list_access_policy> ll_helper;
+    auto ll() { return linked_list_manipulator_t<header_view_t, header_list_access_policy>(this); };
 
 
 };
@@ -391,22 +404,21 @@ private:
 int main(){
 
     linked_list_manipulation_tests::ll_test();
-    return 0;
 
     byte_t buffer[1024];
 
-    //auto h = standard_header_policy_t::segment_header_view_t(buffer, 0);
-    //
-    //h.set_is_free_segment(false);
-    //h.set_next_segment_id(0x5E);
-    //h.set_last_segment_id(0x3B);
-    //h.set_segment_length(0x122);
-    //h.set_segment_begin(0x1122);
-    //
-    //printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
+    auto h = standard_memory_policy<20>::segment_header_view_t(buffer, 0);
+    
+    h.set_is_free_segment(true);
+    h.set_next_segment_id(0x5E);
+    h.set_last_segment_id(0x3B);
+    h.set_segment_length(0x122);
+    h.set_segment_begin(0x1122);
+    
+    printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
     
     
-    queue_pool_t<standard_header_policy_t> pool(buffer, 1024);
+    queue_pool_t<standard_memory_policy<20>> pool(buffer, 1024);
 
 
     printf("Hello world!\n");
