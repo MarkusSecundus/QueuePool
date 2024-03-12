@@ -20,6 +20,7 @@ using buffersize_t = std::size_t;
 struct SegmentHeaderUncompressed {
     buffersize_t next_segment;
     buffersize_t last_segment;
+    buffersize_t segment_begin;
     buffersize_t segment_length;
     bool is_free_segment;
 };
@@ -32,32 +33,63 @@ struct BasicHeaderPolicy {
     static SegmentHeaderUncompressed unpack_header(byte_t* header_ptr) {
         packed_header_t* packed = reinterpret_cast<packed_header_t*>(header_ptr);
         SegmentHeaderUncompressed ret;
+        ret.is_free_segment = packed->is_free_segment;
         ret.next_segment = packed->next_lower | (packed->next_upper << 8);
         ret.last_segment = packed->last_lower | (packed->last_upper << 8);
         ret.segment_length = packed->segment_length_lower | (packed->segment_length_upper << 8);
-        ret.is_free_segment = packed->is_free_segment;
+        if (packed->is_full_from_begin)
+            ret.segment_begin = 0;
+        else {
+            bool begin_is_single_byte = header_ptr[get_header_size_bytes()] < 128;
+            if (begin_is_single_byte)
+                ret.segment_begin = header_ptr[get_header_size_bytes()];
+            else {
+                long_segment_begin_info_t* h = reinterpret_cast<long_segment_begin_info_t*>(header_ptr + get_header_size_bytes());
+                ret.segment_begin = h->lower_7_bits | (h->bits_8_to_15 << 7);
+            }
+        }
         return ret;
     }
     static void pack_header(byte_t* header_ptr, SegmentHeaderUncompressed header_data) {
         packed_header_t* packed = reinterpret_cast<packed_header_t*>(header_ptr);
+        packed->is_free_segment = header_data.is_free_segment;
         packed->next_lower = (byte_t)(header_data.next_segment & 0xFF);
         packed->next_upper = (byte_t)((header_data.next_segment & 0xF00) >> 8);
         packed->last_lower = (byte_t)(header_data.last_segment & 0xFF);
         packed->last_upper = (byte_t)((header_data.last_segment & 0xF00) >> 8);
         packed->segment_length_lower = (byte_t)(header_data.segment_length & 0xFF);
         packed->segment_length_upper = (byte_t)((header_data.segment_length & 0xF00) >> 8);
-        packed->is_free_segment = header_data.is_free_segment;
+        packed->is_full_from_begin = (header_data.segment_begin == 0);
+        if (!packed->is_full_from_begin) {
+            bool fits_into_7_bits = header_data.segment_begin < 128;
+            if (fits_into_7_bits)
+                header_ptr[get_header_size_bytes()] = header_data.segment_begin;
+            else
+            {
+                long_segment_begin_info_t*h = reinterpret_cast<long_segment_begin_info_t*>(header_ptr + get_header_size_bytes());
+                h->this_flag_must_be_1 = true;
+                h->lower_7_bits = (byte_t)(header_data.segment_begin & 0x7F);
+                h->bits_8_to_15 = (byte_t)((header_data.segment_begin >> 7) & 0xFF);
+            }
+        }
     }
 
 private: 
+    PACK(struct long_segment_begin_info_t {
+        byte_t lower_7_bits : 7;
+        byte_t this_flag_must_be_1 : 1;
+        byte_t bits_8_to_15;
+    });
+    static_assert(sizeof(long_segment_begin_info_t) == 2, "Long segment begin info must be exactly 2 bytes");
     PACK(struct packed_header_t {
         byte_t next_lower;
-        byte_t next_upper : 4;
-        byte_t last_upper : 4;
+        byte_t next_upper : 3;
+        byte_t is_free_segment : 1;
+        byte_t last_upper : 3;
+        byte_t is_full_from_begin : 1;
         byte_t last_lower;
         byte_t segment_length_lower;
         byte_t segment_length_upper : 4;
-        byte_t is_free_segment : 1;
     });
     static_assert(sizeof(packed_header_t) == 5, "Segment header is supposed to take exactly 5 bytes");
 };
@@ -112,18 +144,19 @@ int main(){
     byte_t buffer[10];
 
     SegmentHeaderUncompressed h;
-    h.next_segment = 8029;
+    h.next_segment = 2029;
     h.last_segment = 543;
     h.segment_length = 374;
+    h.segment_begin = 909;
     h.is_free_segment = true;
 
-    printf("next: %llx, last: %llx, length: %llx, is_free: %d\n", h.next_segment, h.last_segment, h.segment_length, h.is_free_segment);
+    printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.next_segment, h.last_segment, h.segment_length, h.segment_begin, h.is_free_segment);
 
     BasicHeaderPolicy::pack_header(buffer, h);
 
     {
         auto h = BasicHeaderPolicy::unpack_header(buffer);
-        printf("next: %llx, last: %llx, length: %llx, is_free: %d\n", h.next_segment, h.last_segment, h.segment_length, h.is_free_segment);
+        printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.next_segment, h.last_segment, h.segment_length, h.segment_begin, h.is_free_segment);
     }
 
 
