@@ -2,15 +2,6 @@
 #include<cstddef>
 
 
-//see https://stackoverflow.com/questions/1537964/visual-c-equivalent-of-gccs-attribute-packed
-#ifdef __GNUC__
-#define PACK( __Declaration__ ) __Declaration__ __attribute__((__packed__))
-#endif
-#ifdef _MSC_VER
-#define PACK( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
-#endif
-
-
 
 
 using byte_t = unsigned char;
@@ -18,6 +9,87 @@ using buffersize_t = std::size_t;
 using segment_id_t = std::uint32_t;
 
 
+
+template<typename TAccessPolicy, typename TNode>
+concept linked_list_helper_access_policy = requires(TAccessPolicy pol, TNode a, TNode b)
+{
+    {pol.get_next(a)} -> std::convertible_to<TNode>;
+    {pol.get_last(a)} -> std::convertible_to<TNode>;
+    {pol.set_next(a, b)} -> std::convertible_to<void>;
+    {pol.set_last(a, b)} -> std::convertible_to<void>;
+    {pol.is_same_node(a, b)} ->std::convertible_to<bool>;
+};
+
+template<typename TNode, linked_list_helper_access_policy<TNode> TNodeAccessPolicy>
+struct linked_list_helper_t : private TNodeAccessPolicy{
+
+    template<typename ...Args>
+    linked_list_helper_t(Args ...args): TNodeAccessPolicy(args...){}
+
+    TNode init_single_node(TNode a) {
+        p()->set_next(a, a);
+        p()->set_last(a, a);
+        return a;
+    }
+
+
+    void append_list(TNode n, TNode to_append) {
+        if (p()->is_same_node(n, to_append))
+            return;
+
+        TNode n_next = p()->get_next(n);
+        TNode n_last = p()->get_last(n);
+        TNode to_append_next = p()->get_next(to_append);
+        TNode to_append_last = p()->get_last(to_append);
+        
+        p()->set_next(n, to_append);
+        p()->set_last(to_append, n);
+        p()->set_next(to_append_last, n_next);
+        p()->set_last(n_next, to_append_last);
+    }
+
+    void concat_lists(TNode a, TNode b) {
+        append_list(p()->get_next(a), b);
+    }
+
+    TNode disconnect_node(TNode a) {
+        TNode last = p()->get_last(a);
+        TNode next = p()->get_next(a);
+
+        p()->set_next(last, next);
+        p()->set_last(next, last);
+
+        init_single_node(a);
+
+        return next;
+    }
+
+    bool is_single_node(TNode a) {
+        return p()->is_same_node(a, p()->get_next(a));
+    }
+
+    bool is_valid_list(TNode a) {
+        bool ret = true;
+        foreach(a, [&](TNode a) {
+            if (!p()->is_same_node(a, p()->get_last(p()->get_next(a)))) ret = false;
+            if (!p()->is_same_node(a, p()->get_next(p()->get_last(a)))) ret = false;
+        });
+        return ret;
+    }
+
+
+    template<typename TFunc>
+    void foreach(TNode begin, TFunc iteration) {
+        TNode a = begin;
+        do {
+            iteration(a);
+            a = p()->get_next(a);
+        } while (!p()->is_same_node(a, begin));
+    }
+
+private:
+    TNodeAccessPolicy* p() { return static_cast<TNodeAccessPolicy*>(this); }
+};
 
 
 
@@ -81,6 +153,8 @@ struct standard_header_policy_t {
 
         segment_id_t get_segment_id() { return segment_id; }
 
+        bool is_valid() { return (bool)header_ptr_raw; }
+        static segment_header_view_t invalid() { return segment_header_view_t(NULL, 0); }
     private:
         
         struct long_segment_begin_info_t {
@@ -112,9 +186,6 @@ struct standard_header_policy_t {
         long_segment_begin_info_t::first_byte_t* get_begin_info_extension_header_first_byte_only() { return reinterpret_cast<long_segment_begin_info_t::first_byte_t*>(header_ptr_raw + get_header_size_bytes()); }
         long_segment_begin_info_t* get_begin_info_extension_header() { return reinterpret_cast<long_segment_begin_info_t*>(get_begin_info_extension_header_first_byte_only()); }
     };
-
-
-    static segment_header_view_t make_header_view(byte_t* header_start, segment_id_t segment_id) { return segment_header_view_t(header_start, segment_id); }
 };
 
 
@@ -123,9 +194,9 @@ struct queue_handle_t {
 
     segment_id_t segment_id;
 
-    static queue_handle_t empty() { return queue_handle_t(~0 - 1); }
+    static queue_handle_t empty() { return queue_handle_t(~0 + 1); }
     static queue_handle_t uninitialized(){ return queue_handle_t(~0); }
-    bool is_empty() { return segment_id == (~0 - 1); }
+    bool is_empty() { return segment_id == (~0 + 1); }
     bool is_uninitialized() { return segment_id == ~0; }
 
 };
@@ -138,7 +209,7 @@ template<buffersize_t segment_alignment=20>
 struct queue_pool_t{
 public:
     queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
-        auto free_list = get_header(get_buffer());
+        auto free_list = get_free_list();;
         init_header_list(free_list);
         free_list.set_is_free_segment(true);
         free_list.set_segment_begin(0);
@@ -146,7 +217,7 @@ public:
     }
 
     queue_handle_t make_queue() {
-        return queue_handle_t();
+        return queue_handle_t(0);
     }
     void enqueue_byte(queue_handle_t &handle, byte_t to_enqueue) {
         
@@ -162,56 +233,147 @@ private:
 
     byte_t* buffer_raw;
     buffersize_t buffer_size_raw;
+    segment_id_t free_list_id = 0;
 
-    queue_handle_t get_buffer_header() { return *reinterpret_cast<buffer_header_t*>(buffer_raw); }
-    byte_t* get_buffer() { return buffer_raw + sizeof(buffer_header_t); }
-    buffersize_t get_buffer_size() { return buffer_size_raw - sizeof(buffer_header_t); }
+    byte_t* get_buffer() { return buffer_raw; }
+    buffersize_t get_buffer_size() { return buffer_size_raw; }
 
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * segment_alignment]); }
-    header_view_t get_header(segment_id_t segment_index) { return THeaderPolicy::make_header_view(get_segment_start(segment_index), segment_index); }
+    header_view_t get_header(segment_id_t segment_index) { return header_view_t(get_segment_start(segment_index), segment_index); }
+    header_view_t get_free_list() {
+        header_view_t ret = get_header(free_list_id);
+        return ret;
+    }
+    header_view_t alloc_segment_from_free_list() {
+        auto free_list = get_free_list();
+        if (!free_list.get_is_free_segment())
+            return header_view_t::invalid();
 
-
-    struct buffer_header_t {
-        queue_handle_t free_list;
-    };
-
-
-    void init_header_list(header_view_t v) {
-        v.set_next_segment_id(v.get_segment_id());
-        v.set_last_segment_id(v.get_segment_id());
+        if (free_list.get_segment_length() < segment_alignment) {
+            
+        }
     }
 
-    void concat_headers(header_view_t a, header_view_t b) {
+
+    header_view_t init_header_list(header_view_t v) {
+        v.set_next_segment_id(v.get_segment_id());
+        v.set_last_segment_id(v.get_segment_id());
+        return v;
+    }
+
+    void concat_header_lists(header_view_t a, header_view_t b) {
         if (a.get_segment_id() == b.get_segment_id())
-            throw std::exception();
+            return;
 
         auto a_next = get_header(a.get_next_segment_id());
         auto a_last = get_header(a.get_last_segment_id());
         auto b_next = get_header(b.get_next_segment_id());
         auto b_last = get_header(b.get_last_segment_id());
 
-        
+
+        a.set_last_segment_id(b_last.get_segment_id());
+        b_last.set_next_segment_id(a.get_segment_id());
+
+    }
+
+    header_view_t remove_header_list_node(header_view_t a) {
+        auto last = get_header(a.get_last_segment_id());
+        auto next = get_header(a.get_next_segment_id());
+
+        last.set_next_segment_id(next.get_segment_id());
+        next.set_last_segment_id(last.get_segment_id());
+
+        init_header_list(a);
+
+        return next;
+    }
+
+    bool header_is_single_node_list(header_view_t header) {
+        return header.get_segment_id() == header.get_next_segment_id();
     }
 
 };
 
 
+struct LinkedListNode {
+    LinkedListNode* next, *last;
+    int value;
+
+    using n = LinkedListNode*;
+
+    struct policy {
+        n get_next(n a) { return a->next; }
+        n get_last(n a) { return a->last; }
+        void set_next(n node, n to_set) { node->next = to_set; }
+        void set_last(n node, n to_set) { node->last = to_set; }
+        bool is_same_node(n a, n b) { return a == b; }
+    };
+
+    struct policy_reversed {
+        n get_next(n a) { return a->last; }
+        n get_last(n a) { return a->next; }
+        void set_next(n node, n to_set) { node->last = to_set; }
+        void set_last(n node, n to_set) { node->next = to_set; }
+        bool is_same_node(n a, n b) { return a == b; }
+    };
+};
+
+void ll_test() {
+    LinkedListNode a, b, c, d;
+    linked_list_helper_t<LinkedListNode*, LinkedListNode::policy> h;
+    linked_list_helper_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;
+
+    a.value = 10; h.init_single_node(&a);
+    b.value = 11; h.init_single_node(&b);
+    c.value = 12; h.init_single_node(&c);
+    d.value = 13; h.init_single_node(&d);
+
+#define TEST_PRINT(n) printf("it %d(" #n "): ", h.is_valid_list(&n)); h.foreach(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
+
+    TEST_PRINT(a);
+    h.disconnect_node(&a);
+    TEST_PRINT(a);
+    h.concat_lists(&a, &b);
+    TEST_PRINT(a);
+    h.concat_lists(&c, &d);
+    TEST_PRINT(c);
+    h.concat_lists(&a, &c);
+    TEST_PRINT(a);
+
+    h.disconnect_node(&a);
+    TEST_PRINT(a);
+    TEST_PRINT(b);
+    h.disconnect_node(&c);
+    TEST_PRINT(c);
+    TEST_PRINT(b);
+    h.disconnect_node(&b);
+    TEST_PRINT(d);
+    TEST_PRINT(b);
+
+#undef TEST_PRINT
+}
+
 
 int main(){
 
-    byte_t buffer[10];
+    ll_test();
+    return 0;
 
-    auto h = standard_header_policy_t::make_header_view(buffer, 0);
+    byte_t buffer[1024];
 
-    h.set_is_free_segment(false);
-    h.set_next_segment_id(0x5E);
-    h.set_last_segment_id(0x3B);
-    h.set_segment_length(0x122);
-    h.set_segment_begin(0x1122);
-
-    printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
+    //auto h = standard_header_policy_t::segment_header_view_t(buffer, 0);
+    //
+    //h.set_is_free_segment(false);
+    //h.set_next_segment_id(0x5E);
+    //h.set_last_segment_id(0x3B);
+    //h.set_segment_length(0x122);
+    //h.set_segment_begin(0x1122);
+    //
+    //printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
     
     
+    queue_pool_t<> pool(buffer, 1024);
+
 
     printf("Hello world!\n");
     return 0;
