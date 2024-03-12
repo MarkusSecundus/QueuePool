@@ -303,7 +303,7 @@ concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_
 
 template<buffersize_t SEGMENT_ALIGNMENT>
 struct standard_memory_policy {
-    static constexpr int get_header_size_bytes() { return sizeof(segment_header_view_t::packed_header_t); }
+    static constexpr int get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
     static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
 
     using segment_id_t = std::uint8_t;
@@ -377,7 +377,7 @@ struct standard_memory_policy {
         };
         //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->first_byte)) == 0, "For some reason the compiler doesn't put the first_byte part of long_segment_begin_info_t to its beginning even though it should according to C spec");
         //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->bits_8_to_15)) == 1, "For some reason the compiler doesn't put the bits_8_to_15 part of long_segment_begin_info_t into its 2nd byte");
-        static_assert(sizeof(long_segment_begin_info_t::first_byte_t) == 1, "Long segment begin info must have an exactly 1 byte header");
+        static_assert(sizeof(typename long_segment_begin_info_t::first_byte_t) == 1, "Long segment begin info must have an exactly 1 byte header");
         static_assert(sizeof(long_segment_begin_info_t) == 2, "Long segment begin info must be exactly 2 bytes");
 
         struct packed_header_t {
