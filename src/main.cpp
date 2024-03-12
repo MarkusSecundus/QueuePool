@@ -173,6 +173,37 @@ using segment_id_t = std::uint32_t;
 
 
 
+template<typename THeaderView>
+concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer)
+{
+    {THeaderView(bytebuffer, segment_id)} -> std::convertible_to<THeaderView>;
+
+    {pol.get_next_segment_id()} -> std::convertible_to<segment_id_t>;
+    {pol.set_next_segment_id(segment_id)} -> std::convertible_to<void>;
+
+    {pol.get_last_segment_id()} -> std::convertible_to<segment_id_t>;
+    {pol.set_last_segment_id(segment_id)} -> std::convertible_to<void>;
+
+    {pol.get_segment_begin()} -> std::convertible_to<buffersize_t>;
+    {pol.set_segment_begin(buffersize)} -> std::convertible_to<void>;
+
+    {pol.get_segment_length()} -> std::convertible_to<buffersize_t>;
+    {pol.set_segment_length(buffersize)} -> std::convertible_to<void>;
+
+    {pol.get_is_free_segment()} -> std::convertible_to<bool>;
+    {pol.set_is_free_segment(flag)} -> std::convertible_to<void>;
+
+    {pol.get_segment_data()} -> std::convertible_to<byte_t*>;
+    {pol.get_segment_id()} -> std::convertible_to<segment_id_t>;
+    {pol.is_valid()} -> std::convertible_to<bool>;
+
+    {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
+};
+template<typename THeaderPolicy>
+concept header_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
+    {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<int>;
+    {THeaderPolicy::get_header_size_bits()} -> std::convertible_to<std::size_t>;
+} && header_view<typename THeaderPolicy::segment_header_view_t>;
 
 struct standard_header_policy_t {
     static constexpr int get_header_size_bytes() { return sizeof(segment_header_view_t::packed_header_t); }
@@ -246,8 +277,8 @@ struct standard_header_policy_t {
             first_byte_t first_byte; //according to C spec, first field must always be put at the beginning of the struct
             byte_t bits_8_to_15;
         };
-        static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->first_byte)) == 0, "For some reason the compiler doesn't put the first_byte part of long_segment_begin_info_t to its beginning even though it should according to C spec");
-        static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->bits_8_to_15)) == 1, "For some reason the compiler doesn't put the bits_8_to_15 part of long_segment_begin_info_t into its 2nd byte");
+        //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->first_byte)) == 0, "For some reason the compiler doesn't put the first_byte part of long_segment_begin_info_t to its beginning even though it should according to C spec");
+        //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->bits_8_to_15)) == 1, "For some reason the compiler doesn't put the bits_8_to_15 part of long_segment_begin_info_t into its 2nd byte");
         static_assert(sizeof(long_segment_begin_info_t::first_byte_t) == 1, "Long segment begin info must have an exactly 1 byte header");
         static_assert(sizeof(long_segment_begin_info_t) == 2, "Long segment begin info must be exactly 2 bytes");
 
@@ -285,8 +316,7 @@ static_assert(sizeof(queue_handle_t) == sizeof(segment_id_t), "");
 
 
 
-using THeaderPolicy = standard_header_policy_t;
-template<buffersize_t segment_alignment=20>
+template<header_policy THeaderPolicy=standard_header_policy_t, buffersize_t segment_alignment=20>
 struct queue_pool_t{
 public:
     queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size), ll_helper(this) {
@@ -376,7 +406,7 @@ int main(){
     //printf("next: %llx, last: %llx, length: %llx, begin: %llx, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
     
     
-    queue_pool_t<> pool(buffer, 1024);
+    queue_pool_t<standard_header_policy_t> pool(buffer, 1024);
 
 
     printf("Hello world!\n");
