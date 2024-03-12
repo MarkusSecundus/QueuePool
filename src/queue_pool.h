@@ -48,7 +48,14 @@ public:
         return queue_handle_t::empty();
     }
     bool try_enqueue_byte(queue_handle_t *handle_ptr, byte_t to_enqueue) {
-        
+        auto head = get_header(handle_ptr->get_segment_id());
+        byte_t* new_byte;
+        if (try_grow_queue_by_1(&head) && try_peak_front(head, &new_byte)) {
+            *new_byte = to_enqueue;
+            *handle_ptr = queue_handle_t(head.get_segment_id());
+            return true;
+        }
+        return false;
     }
     bool try_peek_byte(queue_handle_t* handle_ptr, byte_t* out_byte) {
         if (!handle_ptr->is_valid())
@@ -119,15 +126,15 @@ private:
         auto free_list = get_header(*get_free_list_id_ptr());
         if (!free_list.get_is_free_segment())
             return header_view_t::invalid();
-        
+
 
         if (free_list.get_segment_begin() != 0) throw std::runtime_error("This should not happen!");
 
         auto ret = free_list;
         buffersize_t free_list_remaining = free_list.get_segment_length() - get_segment_alignment();
-        if (free_list_remaining < 0) 
+        if (free_list_remaining < 0)
             return header_view_t::invalid();
-        
+
         if (free_list_remaining == 0) {
             if (ll().is_single_node(free_list)) {} //nothing special to do here - the segment will in any case get marked as non-free and that will be the end of free list
             else {
@@ -152,7 +159,7 @@ private:
     header_view_t shrink_segment_from_left_according_to_its_begin(header_view_t h) {
         auto begin = h.get_segment_begin();
         int segments_count = begin / get_segment_alignment();
-        if(segments_count <= 0)
+        if (segments_count <= 0)
             return h;
         int bytes_count = segments_count * get_segment_alignment();
 
@@ -168,40 +175,55 @@ private:
     }
 
 
-    header_view_t try_grow_queue_by_1(header_view_t queue_head){
-        if(!queue_head.is_valid()){
+    bool try_grow_queue_by_1(header_view_t *queue_head) {
+        if (!queue_head) return false;
+
+        if (!queue_head->is_valid()) {
             auto ret = alloc_segment_from_free_list();
-            if(!ret.is_valid()) return header_view_t::invalid();
+            if (!ret.is_valid()) return false;
             ret.set_segment_length(1);
-            return ret;
+            *queue_head = ret;
+            return true;
         }
 
-        auto queue_tail = ll().last(queue_head);
+        auto queue_tail = ll().last(*queue_head);
 
-        if((queue_tail.get_segment_end()/get_segment_alignment()) == ((queue_tail.get_segment_end() + 1)/get_segment_alignment())){
-            queue_tail.set_segment_length(queue_tail.get_segment_length()+1);
-            return queue_head;
+        if ((queue_tail.get_segment_end() / get_segment_alignment()) == ((queue_tail.get_segment_end() + 1) / get_segment_alignment())) {
+            queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
         }
 
         auto next_block = get_header(queue_tail.get_segment_id() + 1);
-        if(next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_end() >= get_segment_alignment()){
+        if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_end() >= get_segment_alignment()) {
             next_block.set_segment_begin(get_segment_alignment());
             next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
             auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
-            if(next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
-            
+            if (next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
+
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
-            return queue_head;
-        }else{
+        }
+        else {
             auto new_block = alloc_segment_from_free_list();
-            if(!new_block.is_valid()) return header_view_t::invalid();
+            if (!new_block.is_valid()) return false;
             new_block.set_segment_begin(0);
             new_block.set_segment_length(1);
             ll().insert_list(queue_tail, new_block);
         }
+        return true;
     }
 
+    bool try_peak_front(header_view_t queue_head, byte_t** out_byte_ptr) {
+        if (!queue_head.is_valid()) return false;
 
+        auto queue_tail = ll().last(queue_head);
+        if (out_byte_ptr) *out_byte_ptr = &queue_tail.get_segment_data()[queue_tail.get_segment_end()];
+
+        return true;
+    }
+    bool try_peak_back(header_view_t queue_head, byte_t** out_byte_ptr){
+        if (!queue_head.is_valid()) return false;
+
+        if (out_byte_ptr) *out_byte_ptr = &queue_head.get_segment_data()[queue_head.get_segment_begin()];
+    }
 
 
 

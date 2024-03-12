@@ -32,7 +32,6 @@ namespace memory_policies{
         {pol.is_valid()} -> std::convertible_to<bool>;
 
         {pol.get_segment_data_raw()} -> std::convertible_to<byte_t*>;
-        {pol.get_segment_length_raw()} -> std::convertible_to<buffersize_t>;
 
         {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
     };
@@ -94,7 +93,7 @@ namespace memory_policies{
                 auto packed = get_header();
                 return packed->segment_length_lower | (packed->segment_length_upper << 8);
             }
-            buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length();}
+            buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length()-1;}
 
             void set_segment_length(buffersize_t value) {
                 auto packed = get_header();
@@ -109,7 +108,6 @@ namespace memory_policies{
             segment_id_t get_segment_id() { return segment_id; }
 
             byte_t* get_segment_data_raw() { return header_ptr_raw; }
-            buffersize_t get_segment_length_raw() { return get_segment_end() + get_header_size_bytes(); }
 
 
             bool is_valid() { return (bool)header_ptr_raw; }

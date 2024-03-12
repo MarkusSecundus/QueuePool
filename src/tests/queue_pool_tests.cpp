@@ -31,9 +31,44 @@ namespace tests{
         auto q = pool.make_queue();
         byte_t byte;
         std::cout << pool.try_peek_byte(&q, &byte) <<"\n";
-        std::cout << pool.try_grow_queue_by_1(pool.get_header(0)).get_segment_id() <<"\n";
+        auto header = pool.get_header(q.get_segment_id());
+        std::cout << pool.try_grow_queue_by_1(&header) <<"\n";
     }
 
+    void QueuePoolTest::test_enqueue_only() {
+        std::cout << "\n---------------------------------\n";
+
+        constexpr int BUFFER_SIZE = 512;
+        byte_t buffer[BUFFER_SIZE];
+
+        using pool_t = queue_pool_t<standard_memory_policy<32>>;
+        pool_t pool(buffer, BUFFER_SIZE);
+
+        auto q = pool.make_queue();
+        for (byte_t b = 42; pool.try_enqueue_byte(&q, b); ++b)
+            std::cout << (int)b << "\n";
+
+        std::cout << "\n********\n";
+        for (std::size_t i=0; i < BUFFER_SIZE; ++i)
+            std::cout << (int)buffer[i] << "\n";
+    }
+
+    void QueuePoolTest::test2() {
+        std::cout << "\n---------------------------------\n";
+
+        constexpr int BUFFER_SIZE = 512;
+        byte_t buffer[BUFFER_SIZE];
+
+        using pool_t = queue_pool_t<standard_memory_policy<32>>;
+        pool_t pool(buffer, BUFFER_SIZE);
+
+        auto q = pool.make_queue();
+        byte_t byte;
+        std::cout << pool.try_peek_byte(&q, &byte) << "\n";
+        auto header = pool.get_header(q.get_segment_id());
+        std::cout << pool.try_grow_queue_by_1(&header) << "\n";
+    
+    }
     void QueuePoolTest::tst(){
 
         byte_t buffer[20];
