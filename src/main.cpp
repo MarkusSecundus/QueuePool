@@ -180,7 +180,7 @@ namespace linked_list_manipulation_tests {
         f.value = 15; h.init_node(&f);
         g.value = 16; h.init_node(&g);
 
-#define TEST_PRINT(n) printf("it %d(" #n "): ", h.validate_list(&n)); printf("<%lld> ", h.length(&n)); h.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf(" | <%lld> ", h2.length(&n)); h2.for_each(&n, [](LinkedListNode* n) {printf("%d, ", n->value); }); printf("\n")
+#define TEST_PRINT(n) std::cout << "it "<<h.validate_list(&n) <<"(" #n "): "; std::cout << "<"<< h.length(&n) <<"> " ; h.for_each(&n, [](LinkedListNode* n) {std::cout << n->value << ", "; }); std::cout<< " | <"<<h2.length(&n) <<"> "; h2.for_each(&n, [](LinkedListNode* n) {std::cout << n->value << ", ";  }); std::cout<<("\n")
 
         TEST_PRINT(a);
         h.disconnect_node(&a);
@@ -205,7 +205,7 @@ namespace linked_list_manipulation_tests {
         h.disconnect_node(&d);
         TEST_PRINT(d);
 
-        printf("reconnecting!...\n");
+        std::cout <<("reconnecting!...\n");
         h.prepend_list(&a, &b);
         h.prepend_list(&a, &c);
         h.prepend_list(&d, &e);
@@ -216,25 +216,25 @@ namespace linked_list_manipulation_tests {
         TEST_PRINT(d);
         TEST_PRINT(e);
         //return;
-        printf("disconnecting!...\n");
-        h.for_each(&a, [&](LinkedListNode* n) {h.disconnect_node(n); printf("%d, ", n->value); }); printf("\n");
+        std::cout <<("disconnecting!...\n");
+        h.for_each(&a, [&](LinkedListNode* n) {h.disconnect_node(n); std::cout <<n->value <<" "; }); std::cout <<("\n");
         TEST_PRINT(a);
         TEST_PRINT(b);
         TEST_PRINT(c);
         TEST_PRINT(d);
         TEST_PRINT(e);
 
-        printf("swapping preparation...\n");
+        std::cout <<("swapping preparation...\n");
         h.prepend_list(&a, &b);
         h.prepend_list(&a, &c);
         h.prepend_list(&d, &e);
         TEST_PRINT(a);
         TEST_PRINT(d);
-        printf("swapping!...\n");
+        std::cout <<("swapping!...\n");
         h.swap_nodes(&a, &d);
         TEST_PRINT(a);
         TEST_PRINT(d);
-        printf("more swapping!...\n");
+        std::cout <<("more swapping!...\n");
         h.swap_nodes(&a, &f);
         TEST_PRINT(a);
         TEST_PRINT(f);
@@ -295,7 +295,7 @@ concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffers
 };
 template<typename THeaderPolicy>
 concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
-    {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<int>;
+    {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<buffersize_t>;
     {THeaderPolicy::get_segment_alignment()} -> std::convertible_to<buffersize_t>;
 } && header_view<typename THeaderPolicy::segment_header_view_t> 
   && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
@@ -303,7 +303,7 @@ concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_
 
 template<buffersize_t SEGMENT_ALIGNMENT>
 struct standard_memory_policy {
-    static constexpr int get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
+    static constexpr buffersize_t get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
     static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
 
     using segment_id_t = std::uint8_t;
@@ -406,9 +406,28 @@ struct QueuePoolTest;
 
 template<memory_policy TMemoryPolicy=standard_memory_policy<20>>
 struct queue_pool_t{
+private:
+    using header_view_t = typename TMemoryPolicy::segment_header_view_t;
+    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
+
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
-    using queue_handle_t = segment_id_t;
+    struct queue_handle_t {
+        queue_handle_t(segment_id_t segment_id_):segment_id(segment_id_){}
+
+        segment_id_t get_segment_id()const { return segment_id; }
+
+        static constexpr queue_handle_t uninitialized() { return queue_handle_t(~0); }
+        static constexpr queue_handle_t empty() { return queue_handle_t((segment_id_t)(std::size_t)(~0) - 1); }
+
+
+        bool is_uninitialized() { return segment_id == uninitialized().segment_id; }
+        bool is_empty() { return segment_id == empty().segment_id; }
+        bool is_valid() { return !(is_empty() || is_uninitialized()); }
+
+    private:
+        segment_id_t segment_id;
+    };
 
 
 
@@ -417,20 +436,43 @@ public:
     }
 
     queue_handle_t make_queue() {
-        return queue_handle_t(0);
+        return queue_handle_t::empty();
     }
-    void enqueue_byte(queue_handle_t &handle, byte_t to_enqueue) {
+    bool try_enqueue_byte(queue_handle_t *handle_ptr, byte_t to_enqueue) {
         
     }
-    byte_t dequeue_byte(queue_handle_t &handle) {
-        return 0;
+    bool try_peek_byte(queue_handle_t* handle_ptr, byte_t* out_byte) {
+        if (!handle_ptr->is_valid())
+            return false;
+        
+        header_view_t h = get_header(handle_ptr->get_segment_id());
+        if(out_byte) *out_byte = h.get_segment_data()[h.get_segment_begin()];
+        return true;
     }
-    void destroy_queue(queue_handle_t &handle){}
+    bool try_dequeue_byte(queue_handle_t *handle_ptr, byte_t* out_byte) {
+        if (!handle_ptr->is_valid())
+            return false;
+
+        header_view_t h = get_header(handle_ptr->get_segment_id());
+        
+        auto segment_begin = h.get_segment_begin();
+        auto segment_length = h.get_segment_length();
+        if(out_byte) *out_byte = h.get_segment_data()[segment_begin];
+        h.set_segment_begin(segment_begin() + 1);
+        h.set_segment_length(segment_length -= 1);
+        if (segment_length <= 0) {
+            //TODO: implement
+        }
+
+        return true;
+    }
+    void destroy_queue(queue_handle_t *handle_ptr)
+    {
+        while (try_dequeue_byte(handle_ptr, NULL));
+    }
 
 
 private:
-    using header_view_t = typename TMemoryPolicy::segment_header_view_t;
-    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
     byte_t* buffer_raw;
     buffersize_t buffer_size_raw;
@@ -441,7 +483,7 @@ private:
     buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_segment_alignment(); }
 
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_segment_alignment()]); }
-    segment_id_t get_max_segment_id() { return get_buffer_size() / get_segment_alignment() ; }
+    segment_id_t get_max_segment_id() { return (segment_id_t)(get_buffer_size() / get_segment_alignment() ); }
 
     header_view_t get_header(segment_id_t segment_index) { return header_view_t(get_segment_start(segment_index), segment_index); }
 
@@ -458,12 +500,9 @@ private:
         free_list.set_segment_length(get_allocatable_buffer_size());
         return free_list.get_segment_id();
     }
-    header_view_t get_free_list() {
-        header_view_t ret = get_header(*get_free_list_id_ptr());
-        return ret;
-    }
+
     header_view_t alloc_segment_from_free_list() {
-        auto free_list = get_free_list();
+        auto free_list = get_header(*get_free_list_id_ptr());
         if (!free_list.get_is_free_segment())
             return header_view_t::invalid();
         
@@ -500,6 +539,14 @@ private:
         return ret;
     }
 
+
+
+
+
+
+
+
+
     struct header_list_access_policy {
     public:
         header_list_access_policy(queue_pool_t *pool_):pool(pool_){}
@@ -523,17 +570,26 @@ private:
 
 struct QueuePoolTest {
     static void test_allocation_only() {
-        constexpr int BUFFER_SIZE = 2048;
+        constexpr int BUFFER_SIZE = 1920;
         byte_t buffer[BUFFER_SIZE];
 
-        queue_pool_t<standard_memory_policy<20>> pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy<20>>;
+
+        pool_t pool(buffer, BUFFER_SIZE);
 
         while (true) {
             auto allocated = pool.alloc_segment_from_free_list();
             if (!allocated.is_valid())
                 break;
-            printf("is_free: %d, id: %3lld, next: %lld, last: %lld, begin: %lld, length: %lld,  data: %p\n", allocated.get_is_free_segment(), allocated.get_segment_id(), allocated.get_next_segment_id(), allocated.get_last_segment_id(), allocated.get_segment_begin(), allocated.get_segment_length(), allocated.get_segment_data());
+            std::cout << "is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
         }
+
+
+        std::cout << "handles... empty: "<< (int)pool_t::queue_handle_t::empty().get_segment_id() <<", invalid: "<< (int)pool_t::queue_handle_t::uninitialized().get_segment_id()<<"\n";
+
+        auto q = pool.make_queue();
+        byte_t byte;
+        std::cout << pool.try_peek_byte(&q, &byte) <<"\n";
     }
 };
 
@@ -554,13 +610,13 @@ int main(){
     h.set_segment_length(0x122);
     h.set_segment_begin(0x1122);
     
-    printf("next: %x, last: %x, length: %x, begin: %x, is_free: %d\n", h.get_next_segment_id(), h.get_last_segment_id(), h.get_segment_length(), h.get_segment_begin(), h.get_is_free_segment());
+    std::cout << "next: "<< (int)h.get_next_segment_id()<<", last: "<< (int)h.get_last_segment_id()<<", length: "<<h.get_segment_length()<<", begin: "<< h.get_segment_begin()<<", is_free: "<<h.get_is_free_segment()<<"\n";
     
-    printf("\n\n");
+    std::cout << ("\n\n");
 
     QueuePoolTest::test_allocation_only();
 
 
-    printf("\n\nFinished\n");
+    std::cout << ("\n\nFinished\n");
     return 0;
 }
