@@ -179,6 +179,7 @@ private:
         if (!queue_head) return false;
 
         if (!queue_head->is_valid()) {
+            std::cout << "initializing queue!\n";
             auto ret = alloc_segment_from_free_list();
             if (!ret.is_valid()) return false;
             ret.set_segment_length(1);
@@ -188,12 +189,15 @@ private:
 
         auto queue_tail = ll().last(*queue_head);
 
-        if ((queue_tail.get_segment_end() / get_segment_alignment()) == ((queue_tail.get_segment_end() + 1) / get_segment_alignment())) {
+        auto segment_size = queue_tail.get_segment_end() + TMemoryPolicy::get_header_size_bytes();
+        if ((segment_size / get_segment_alignment()) == ((segment_size + 1) / get_segment_alignment())) {
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
+            return true;
         }
 
         auto next_block = get_header(queue_tail.get_segment_id() + 1);
         if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_end() >= get_segment_alignment()) {
+            std::cout << "extending block!\n";
             next_block.set_segment_begin(get_segment_alignment());
             next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
             auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
@@ -202,6 +206,7 @@ private:
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
         }
         else {
+            std::cout << "allocating new block!..." << next_block.is_valid() <<", "<< next_block.get_is_free_segment() << ", " << next_block.get_segment_end() << "\n";
             auto new_block = alloc_segment_from_free_list();
             if (!new_block.is_valid()) return false;
             new_block.set_segment_begin(0);

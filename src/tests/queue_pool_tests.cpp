@@ -38,15 +38,18 @@ namespace tests{
     void QueuePoolTest::test_enqueue_only() {
         std::cout << "\n---------------------------------\n";
 
-        constexpr int BUFFER_SIZE = 512;
+        constexpr int BUFFER_SIZE = 70;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<32>>;
+        using pool_t = queue_pool_t<standard_memory_policy<16>>;
         pool_t pool(buffer, BUFFER_SIZE);
 
         auto q = pool.make_queue();
-        for (byte_t b = 42; pool.try_enqueue_byte(&q, b); ++b)
-            std::cout << (int)b << "\n";
+        std::size_t i = 0;
+        for (byte_t b = 0; pool.try_enqueue_byte(&q, b); ++b, ++i) {
+            byte_t *bb;
+            std::cout << (int)b << " -> " << (int)(pool.try_peak_front(pool.get_header(q.get_segment_id()), &bb), *bb) << " -> " << (int)buffer[i] << "\n";
+        }
 
         std::cout << "\n********\n";
         for (std::size_t i=0; i < BUFFER_SIZE; ++i)
