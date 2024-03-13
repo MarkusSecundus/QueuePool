@@ -19,8 +19,11 @@ namespace tests{
         void test_enqueue_dequeue_only_full();
         void test_enqueue_dequeue1();
 
+        void test_queue_randomized();
+
         void test_header_correctness();
     private:
+        //to be able to write helper functions that use friendship with queue_pool_t inside tests_*.cpp files
         struct Helper;
     };
 

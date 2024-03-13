@@ -21,6 +21,7 @@ struct queue_pool_t {
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
     struct queue_handle_t {
+        queue_handle_t() : queue_handle_t(uninitialized().get_segment_id()) {}
         queue_handle_t(segment_id_t segment_id_) :segment_id(segment_id_) {}
         static constexpr queue_handle_t from_header(typename queue_pool_t::header_view_t h) { return !h.is_valid() ? queue_handle_t::empty(): queue_handle_t(h.get_segment_id()); }
 
@@ -201,7 +202,6 @@ private:
             return true;
         }
 
-        auto free_list = get_free_list();
         auto queue_tail = ll().last(*queue_head);
 
         auto segment_size = queue_tail.get_segment_begin() + queue_tail.get_segment_length() + TMemoryPolicy::get_header_size_bytes();
@@ -212,20 +212,20 @@ private:
             return true;
         }
         if (USE_LARGE_SEGMENTS()) {
+            auto free_list = get_free_list();
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
             //dbg_enqueue("peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id());
             //if (next_block.is_valid()) dbg_enqueue(" free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n");
             //else dbg_enqueue("\n");
+
             if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_length() >= get_segment_alignment()) {
                 //dbg_enqueue("extending block! ...");
                 next_block.set_segment_begin(get_segment_alignment());
                 next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
                 auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
-                if (free_list.is_valid() && next_block.get_segment_id() == free_list.get_segment_id()) set_free_list(new_free_block_begin);
-                else {
-                    //TODO: implement
-                }
-                //dbg_enqueue("new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n");
+                if (free_list.is_valid() && next_block.get_segment_id() == free_list.get_segment_id()) 
+                    set_free_list(new_free_block_begin);
+               
 
                 queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
                 return true;
