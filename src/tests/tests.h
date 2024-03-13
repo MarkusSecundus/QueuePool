@@ -20,6 +20,7 @@ namespace tests{
         void test_enqueue_dequeue1();
 
         void test_queue_randomized();
+        void test_queue_randomized_with_destroy();
 
         void test_header_correctness();
     private:
@@ -28,6 +29,7 @@ namespace tests{
     };
 
     void ll_test();
+    void ll_node_swap_test();
 
 }
 

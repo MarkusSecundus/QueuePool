@@ -42,7 +42,7 @@ public:
 
 
 
-    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
+    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw_(buffer), buffer_size_raw_(buffer_size) {
         if (buffer_size > TMemoryPolicy::get_max_addresable_memory_bytes())
             throw std::runtime_error("buffer is too big!");
         *get_free_list_id_ptr_() = init_free_list();
@@ -95,16 +95,16 @@ private:
     using header_view_t = typename TMemoryPolicy::segment_header_view_t;
     static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
 
-    byte_t* buffer_raw;
-    buffersize_t buffer_size_raw;
+    byte_t* buffer_raw_;
+    buffersize_t buffer_size_raw_;
 
 
-    byte_t* get_buffer() { return buffer_raw; }
-    buffersize_t get_buffer_size() { return buffer_size_raw; }
+    byte_t* get_buffer() { return buffer_raw_; }
+    //buffersize_t get_buffer_size() { return buffer_size_raw; }
     buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_segment_alignment(); }
 
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_segment_alignment()]); }
-    segment_id_t get_max_segment_id() { return (segment_id_t)(get_buffer_size() / get_segment_alignment()); }
+    segment_id_t get_max_segment_id() { return (segment_id_t)(buffer_size_raw_ / get_segment_alignment()); }
 
     header_view_t get_header(segment_id_t segment_index) {
         if (segment_index < 0 || segment_index >= get_max_segment_id()) return header_view_t::invalid();
@@ -129,7 +129,7 @@ private:
         ll().init_node(free_list);
         free_list.set_is_free_segment(true);
         free_list.set_segment_begin(0);
-        free_list.set_segment_length(get_allocatable_buffer_size());
+        free_list.set_segment_length(get_allocatable_buffer_size() - TMemoryPolicy::get_header_size_bytes());
         return free_list.get_segment_id();
     }
 
@@ -142,11 +142,11 @@ private:
         if (free_list.get_segment_begin() != 0) throw std::runtime_error("This should not happen!");
 
         auto ret = free_list;
-        auto free_list_remaining = (std::ptrdiff_t)free_list.get_segment_length() - (std::ptrdiff_t)get_segment_alignment();
-        if (free_list_remaining < 0)
+        auto free_list_remaining_blocks = get_blocks_count_of_segment(free_list);
+        if (free_list_remaining_blocks < 1)
             return header_view_t::invalid();
 
-        if (free_list_remaining == 0) {
+        if (free_list_remaining_blocks == 1) {
             if (ll().is_single_node(free_list)) {} //nothing special to do here - the segment will in any case get marked as non-free and that will be the end of free list
             else {
                 auto next_free_segment = ll().next(free_list);
@@ -168,6 +168,8 @@ private:
     }
 
     header_view_t shrink_segment_from_left_according_to_its_begin(header_view_t h) {
+        if (!h.is_valid()) return h;
+
         auto begin = h.get_segment_begin();
         int segments_count = begin / get_segment_alignment();
         if (segments_count <= 0)
@@ -177,7 +179,7 @@ private:
         auto next_part_of_this_continuous_segment = get_header(h.get_segment_id() + segments_count);
         if (next_part_of_this_continuous_segment.is_valid()) {
             next_part_of_this_continuous_segment.set_segment_begin(begin - bytes_count);
-            next_part_of_this_continuous_segment.set_segment_length(h.get_segment_length());
+            next_part_of_this_continuous_segment.set_segment_length(h.get_segment_length()); //length is an offset from begin, this remains the same
             next_part_of_this_continuous_segment.set_is_free_segment(h.get_is_free_segment());
 
             ll().init_node(next_part_of_this_continuous_segment);
@@ -204,13 +206,11 @@ private:
 
         auto queue_tail = ll().last(*queue_head);
 
-        auto segment_size = queue_tail.get_segment_begin() + queue_tail.get_segment_length() + TMemoryPolicy::get_header_size_bytes();
-        //dbg_enqueue( << "testing to take next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n");
-        if (math::divide_round_up(segment_size, get_segment_alignment()) == math::divide_round_up((segment_size + 1), get_segment_alignment())) {
-            //dbg_enqueue( << "taking next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n");
+        if (get_blocks_count_of_segment(queue_tail) == get_blocks_count_of_segment(queue_tail, +1)) {
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
             return true;
         }
+
         if (USE_LARGE_SEGMENTS()) {
             auto free_list = get_free_list();
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
@@ -218,7 +218,8 @@ private:
             //if (next_block.is_valid()) dbg_enqueue(" free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n");
             //else dbg_enqueue("\n");
 
-            if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_length() >= get_segment_alignment()) {
+            if (next_block.is_valid() && next_block.get_is_free_segment()) {
+                if (get_blocks_count_of_segment(next_block) < 1) throw std::runtime_error("should not happen");
                 //dbg_enqueue("extending block! ...");
                 next_block.set_segment_begin(get_segment_alignment());
                 next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
@@ -297,14 +298,16 @@ private:
         if (!h.is_valid()) return;
         auto blocks_count = get_blocks_count_of_segment(h);
         h.set_segment_begin(0);
-        h.set_segment_length(blocks_count * get_segment_alignment());
+        h.set_segment_length(blocks_count * get_segment_alignment() - TMemoryPolicy::get_header_size_bytes());
+        h.set_is_free_segment(true);
         h.set_is_free_segment(true);
     }
 
 
     static constexpr bool USE_LARGE_SEGMENTS() { return false; }
 
-    buffersize_t get_blocks_count_of_segment(header_view_t h) { return math::divide_round_up(h.get_segment_begin() + h.get_segment_length() + TMemoryPolicy::get_header_size_bytes(), get_segment_alignment()); }
+    buffersize_t get_blocks_count_of_segment(header_view_t h, buffersize_t additional_bytes) { return math::divide_round_up(h.get_segment_begin() + h.get_segment_length() + TMemoryPolicy::get_header_size_bytes() + additional_bytes, get_segment_alignment()); }
+    buffersize_t get_blocks_count_of_segment(header_view_t h) { return get_blocks_count_of_segment(h, 0); }
 
 
     struct header_list_access_policy {

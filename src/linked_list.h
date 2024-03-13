@@ -75,27 +75,15 @@ namespace linked_lists{
 
             if (p.is_null(a)) return;
             if (p.is_null(b)) return;
-            
+
             bool a_is_single = is_single_node(a);
             bool b_is_single = is_single_node(b);
 
-            TNode a_next = p.get_next(a);
-            TNode a_last = p.get_last(a);
-            TNode b_next = p.get_next(b);
-            TNode b_last = p.get_last(b);
-        
-            p.set_next(a, b_next);
-            p.set_last(b_next, a);
-            p.set_last(a, b_last);
-            p.set_next(b_last, a);
-        
-            p.set_next(b, a_next);
-            p.set_last(a_next, b);
-            p.set_last(b, a_last);
-            p.set_next(a_last, b);
+            TNode a_remainder = disconnect_node(a);
+            TNode b_remainder = disconnect_node(b);
 
-            if (a_is_single) init_node(b);
-            if (b_is_single) init_node(a);
+            if (!a_is_single) prepend_list(a_remainder, b);
+            if (!b_is_single) prepend_list(b_remainder, a);
         }
 
         TNode disconnect_node(TNode a) {
