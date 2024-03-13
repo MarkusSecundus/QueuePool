@@ -16,7 +16,9 @@ using buffersize_t = std::size_t;
 using segment_id_t = std::uint32_t;
 
 
-#define dbg(...) (std::cout << __VA_ARGS__);
+#define dbg(...) (std::cout << __VA_ARGS__)
+
+#define dbg_enqueue(...) //dbg( __VA_ARGS__ )
 
 
 

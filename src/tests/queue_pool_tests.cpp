@@ -40,7 +40,7 @@ namespace tests{
 
 
 
-    void QueuePoolTest::test_enqueue_only() {
+    void QueuePoolTest::test_enqueue1() {
         std::cout << "\n---------------------------------\n";
 
         constexpr int BUFFER_SIZE = 70;
@@ -56,11 +56,36 @@ namespace tests{
             std::cout << (int)b << " -> " << (int)(pool.try_peak_front(pool.get_header(q.get_segment_id()), &bb), *bb) << " -> " << (int)buffer[i] << "\n";
         }
 
-        return;
         std::cout << "\n********\n";
         for (std::size_t i=0; i < BUFFER_SIZE; ++i)
             std::cout << (int)buffer[i] << "\n";
     }
+    void QueuePoolTest::test_enqueue2() {
+        std::cout << "\n---------------------------------\n";
+
+        constexpr int BUFFER_SIZE = 70, BLOCK_SIZE=15;
+        byte_t buffer[BUFFER_SIZE];
+
+        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
+        pool_t pool(buffer, BUFFER_SIZE);
+
+        auto q = pool.make_queue();
+        auto q2 = pool.make_queue();
+        std::size_t i = 0;
+        bool choice=false;
+        for (byte_t b = 0; (choice = (std::rand() & 1)), (pool.try_enqueue_byte(choice?&q:&q2, b + (choice?0:0)) || (choice = !choice , pool.try_enqueue_byte(choice ? &q : &q2, b + (choice ? 0 : 0)))); ++b, ++i) {
+            byte_t *bb;
+            std::cout << (int)b << " into[" << choice << "] -> " << (int)(pool.try_peak_front(pool.get_header(q.get_segment_id()), &bb), *bb) << " -> " << (int)buffer[i] << "\n";
+        }
+
+        std::cout << "\n********\n";
+        for (std::size_t i = 0; i < BUFFER_SIZE; ++i) {
+            if (!(i % BLOCK_SIZE)) std::cout << "_\n";
+            std::cout << (int)buffer[i] << "\n";
+        }
+    }
+
+
 
     void QueuePoolTest::test_header_correctness(){
         std::cout << "\n----------------------------------------\nHEADER CORRECTNESS...\n";

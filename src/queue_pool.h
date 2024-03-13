@@ -172,6 +172,9 @@ private:
             ll().init_node(next_part_of_this_continuous_segment);
             ll().swap_nodes(h, next_part_of_this_continuous_segment);
         }
+        else {
+            ll().disconnect_node(h);
+        }
         return next_part_of_this_continuous_segment;
     }
 
@@ -183,7 +186,7 @@ private:
             auto ret = alloc_segment_from_free_list();
             if (!ret.is_valid()) return false;
             ret.set_segment_length(1);
-            std::cout << "initializing queue! " << (int)(ret.get_segment_begin() + ret.get_segment_length() + TMemoryPolicy::get_header_size_bytes()) << " / " << (int)get_segment_alignment() << "\n";
+            dbg_enqueue("initializing queue! " << (int)(ret.get_segment_begin() + ret.get_segment_length() + TMemoryPolicy::get_header_size_bytes()) << " / " << (int)get_segment_alignment() << "\n");
             *queue_head = ret;
             return true;
         }
@@ -191,24 +194,24 @@ private:
         auto queue_tail = ll().last(*queue_head);
 
         auto segment_size = queue_tail.get_segment_begin() + queue_tail.get_segment_length() + TMemoryPolicy::get_header_size_bytes();
-        //std::cout << "testing to take next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n";
+        //dbg_enqueue( << "testing to take next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n");
         if ( math::divide_round_up(segment_size, get_segment_alignment()) == math::divide_round_up((segment_size + 1), get_segment_alignment())) {
-            //std::cout << "taking next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n";
+            //dbg_enqueue( << "taking next byte - segment_size: " << segment_size << " / " << get_segment_alignment() << "\n");
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
             return true;
         }
         if(true){
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
-            std::cout << "peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id();
-            if (next_block.is_valid()) std::cout << " free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n";
-            else std::cout << "\n";
+            dbg_enqueue("peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id());
+            if (next_block.is_valid()) dbg_enqueue(" free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n");
+            else dbg_enqueue("\n");
             if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_length() >= get_segment_alignment()) {
-                std::cout << "extending block! ...";
+                dbg_enqueue("extending block! ...");
                 next_block.set_segment_begin(get_segment_alignment());
                 next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
                 auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
                 if (next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
-                std::cout << "new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n";
+                dbg_enqueue("new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n");
 
                 queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
                 return true;
@@ -216,9 +219,9 @@ private:
         }
         {
             auto new_block = alloc_segment_from_free_list(); 
-            std::cout << "allocating new block(" << new_block.is_valid() << ")!...";
+            dbg_enqueue("allocating new block(" << new_block.is_valid() << ")!...");
             if (!new_block.is_valid()) return false;
-            std::cout << "id: " << (int)new_block.get_segment_id() << ", free(" << (int)new_block.get_is_free_segment() << "), length: " << (int)new_block.get_segment_length() << "\n";
+            dbg_enqueue("id: " << (int)new_block.get_segment_id() << ", free(" << (int)new_block.get_is_free_segment() << "), length: " << (int)new_block.get_segment_length() << "\n");
             new_block.set_segment_begin(0);
             new_block.set_segment_length(1);
             ll().insert_list(queue_tail, new_block);

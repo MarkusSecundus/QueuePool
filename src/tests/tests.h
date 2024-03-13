@@ -11,7 +11,8 @@
 namespace tests{
     struct QueuePoolTest {
         void test_allocation_only();
-        void test_enqueue_only();
+        void test_enqueue1();
+        void test_enqueue2();
         void test_header_correctness();
     };
 

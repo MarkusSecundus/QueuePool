@@ -16,7 +16,7 @@ int main(){
     //tests::ll_test();
     //tests::QueuePoolTest{}.test_header_correctness();
     tests::QueuePoolTest{}.test_allocation_only();
-    tests::QueuePoolTest{}.test_enqueue_only();
+    tests::QueuePoolTest{}.test_enqueue2();
 
 
     return 0;
