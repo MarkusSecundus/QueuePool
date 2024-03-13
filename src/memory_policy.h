@@ -39,14 +39,17 @@ namespace memory_policies{
     concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
         {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<buffersize_t>;
         {THeaderPolicy::get_segment_alignment()} -> std::convertible_to<buffersize_t>;
+        {THeaderPolicy::get_max_addresable_memory_bytes()} -> std::convertible_to<buffersize_t>;
     } && header_view<typename THeaderPolicy::segment_header_view_t> 
     && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
 
 
     template<buffersize_t SEGMENT_ALIGNMENT>
     struct standard_memory_policy {
+    public:
         static constexpr buffersize_t get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
         static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
+        static constexpr buffersize_t get_max_addresable_memory_bytes() { return SEGMENT_ALIGNMENT * (1<<7); }
 
         using segment_id_t = std::uint8_t;
 
