@@ -16,9 +16,12 @@ namespace tests{
         void test_enqueue2();
         void test_enqueue2with_destroy();
 
+        void test_enqueue_dequeue_only_full();
         void test_enqueue_dequeue1();
 
         void test_header_correctness();
+    private:
+        struct Helper;
     };
 
     void ll_test();

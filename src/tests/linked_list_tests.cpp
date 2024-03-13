@@ -20,6 +20,7 @@ namespace tests {
             void set_next(n node, n to_set) { node->next = to_set; }
             void set_last(n node, n to_set) { node->last = to_set; }
             bool is_same_node(n a, n b) { return a == b; }
+            bool is_null(n a) { return !a; }
         };
 
         struct policy_reversed {
@@ -28,6 +29,7 @@ namespace tests {
             void set_next(n node, n to_set) { node->last = to_set; }
             void set_last(n node, n to_set) { node->next = to_set; }
             bool is_same_node(n a, n b) { return a == b; }
+            bool is_null(n a) { return !a; }
         };
     };
 

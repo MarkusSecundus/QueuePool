@@ -12,6 +12,7 @@ namespace linked_lists{
         {pol.set_next(a, b)} -> std::convertible_to<void>;
         {pol.set_last(a, b)} -> std::convertible_to<void>;
         {pol.is_same_node(a, b)} ->std::convertible_to<bool>;
+        {pol.is_null(a)} -> std::convertible_to<bool>;
     };
 
     template<typename TNode, linked_list_manipulator_access_policy<TNode> TNodeAccessPolicy>
@@ -22,6 +23,7 @@ namespace linked_lists{
 
         TNode init_node(TNode a) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(a)) return a;
             p.set_next(a, a);
             p.set_last(a, a);
             return a;
@@ -29,18 +31,23 @@ namespace linked_lists{
 
         TNode next(TNode n) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(n)) return n;
             return p.get_next(n);
         }
         TNode last(TNode n) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(n)) return n;
             return p.get_last(n);
         }
 
 
-        void insert_list(TNode n, TNode to_append) {
+        TNode insert_list(TNode n, TNode to_append) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(n)) return to_append;
+            if (p.is_null(to_append)) return n;
+
             if (p.is_same_node(n, to_append))
-                return;
+                return n;
 
             TNode n_next = p.get_next(n);
             TNode n_last = p.get_last(n);
@@ -51,15 +58,23 @@ namespace linked_lists{
             p.set_last(to_append, n);
             p.set_next(to_append_last, n_next);
             p.set_last(n_next, to_append_last);
+            return n;
         }
 
-        void prepend_list(TNode a, TNode b) {
+        TNode prepend_list(TNode a, TNode b) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(a)) return b;
+            if (p.is_null(b)) return a;
+
             insert_list(p.get_last(a), b);
+            return a;
         }
 
         void swap_nodes(TNode a, TNode b) {
             TNodeAccessPolicy& p(accessor_policy());
+
+            if (p.is_null(a)) return;
+            if (p.is_null(b)) return;
             
             bool a_is_single = is_single_node(a);
             bool b_is_single = is_single_node(b);
@@ -85,6 +100,8 @@ namespace linked_lists{
 
         TNode disconnect_node(TNode a) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(a)) return a;
+
             TNode last = p.get_last(a);
             TNode next = p.get_next(a);
 
@@ -98,10 +115,13 @@ namespace linked_lists{
 
         bool is_single_node(TNode a) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(a)) return true;
             return p.is_same_node(a, p.get_next(a));
         }
 
         std::size_t length(TNode a) {
+            TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(a)) return 0;
             std::size_t ret = 0;
             for_each(a, [&](TNode n) {++ret; });
             return ret;
@@ -121,6 +141,7 @@ namespace linked_lists{
         template<typename TFunc>
         void for_each(TNode begin, TFunc iteration) {
             TNodeAccessPolicy& p(accessor_policy());
+            if (p.is_null(begin)) return;
 
             TNode a = begin, last = p.get_last(begin);
             for (;;) {

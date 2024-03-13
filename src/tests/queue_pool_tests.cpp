@@ -19,6 +19,22 @@ namespace tests{
         }
     }
 
+    struct QueuePoolTest::Helper {
+        template<memory_policy TMemoryPolicy>
+        void printout_queue(std::ostream& wrt, queue_pool_t<TMemoryPolicy>& pool, typename buffersize_t handle) { printout_queue(wrt, pool, queue_pool_t<TMemoryPolicy>::queue_handle_t(handle)); }
+        template<memory_policy TMemoryPolicy>
+        void printout_queue(std::ostream& wrt, queue_pool_t<TMemoryPolicy>& pool, typename queue_pool_t<TMemoryPolicy>::queue_handle_t handle) {
+            if (!handle.is_valid()) {
+                wrt << "<empty>\n"; return;
+            }
+            pool.ll().for_each(pool.get_header(handle.get_segment_id()), [&](auto header) {
+                wrt << (int) header.get_segment_id() << " -> ";
+                });
+            wrt << "\n";
+        }
+    };
+
+
 
     void QueuePoolTest::test_allocation_only() {
         std::cout << "\n----------------------------------------\nALLOCATION...\n";
@@ -34,7 +50,7 @@ namespace tests{
             if (!allocated.is_valid())
                 break;
             std::cout << "allocated... is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
-            allocated = pool.get_header(*pool.get_free_list_id_ptr());
+            allocated = pool.get_free_list();
             std::cout << "free_list... is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
         }
 
@@ -115,6 +131,29 @@ namespace tests{
     }
 
 
+    void QueuePoolTest::test_enqueue_dequeue_only_full() {
+        std::cout << "\n---------------------------------\n";
+
+        constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10, ITERATIONS=5;
+        byte_t buffer[BUFFER_SIZE];
+
+        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
+        pool_t pool(buffer, BUFFER_SIZE);
+
+        for (int it = 0; it < ITERATIONS; ++it) {
+            auto q = pool.make_queue();
+            for (int b = 0; pool.try_enqueue_byte(&q, (byte_t)b); ++b) {
+                std::cout << (int)b << ")  " << (int)(char)b << "\n";
+            }
+            Helper{}.printout_queue(std::cout << "   q: ", pool, q);
+            Helper{}.printout_queue(std::cout << "free: ", pool, *pool.get_free_list_id_ptr_());
+            std::cout << "clearing.........\n";
+            pool.destroy_queue(&q);
+        }
+
+
+        //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
+    }
     void QueuePoolTest::test_enqueue_dequeue1() {
         std::cout << "\n---------------------------------\n";
 
@@ -130,6 +169,7 @@ namespace tests{
             byte_t* bb;
             std::cout << (int)b << " -> " << (int)(pool.try_peak_front(pool.get_header(q.get_segment_id()), &bb), *bb) << " -> " << (int)buffer[i] << "\n";
         }
+        //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
         i = 0;
         for (byte_t b = 0; pool.try_dequeue_byte(&q, &b); ++i) {
             byte_t* bb;
@@ -137,7 +177,7 @@ namespace tests{
         }
 
 
-        printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
+        //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
     }
 
 

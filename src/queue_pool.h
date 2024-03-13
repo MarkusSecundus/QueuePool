@@ -44,7 +44,7 @@ public:
     queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw(buffer), buffer_size_raw(buffer_size) {
         if (buffer_size > TMemoryPolicy::get_max_addresable_memory_bytes())
             throw std::runtime_error("buffer is too big!");
-        *get_free_list_id_ptr() = init_free_list();
+        *get_free_list_id_ptr_() = init_free_list();
     }
 
     queue_handle_t make_queue() {
@@ -71,7 +71,11 @@ public:
             return false;
 
         auto head = get_header(handle_ptr->get_segment_id());
-        if (try_shrink_queue_by_1(&head) && try_peak_back(head, &out_byte)) {
+
+        byte_t* back_ref;
+        if (!try_peak_back(head, &back_ref)) return false;
+        *out_byte = *back_ref;
+        if (try_shrink_queue_by_1(&head)) {
             *handle_ptr = queue_handle_t::from_header(head);
             return true;
         }
@@ -105,11 +109,21 @@ private:
         if (segment_index < 0 || segment_index >= get_max_segment_id()) return header_view_t::invalid();
         return header_view_t(get_segment_start(segment_index), segment_index);
     }
-
+    void join_segments_into_free_list(header_view_t list_head, header_view_t free_list_cached) {
+        dbg_destroy("free_list(" << free_list_cached.is_valid() << ")");
+        set_free_list(ll().prepend_list(free_list_cached, list_head));
+    }
 
 
     segment_id_t free_list_id___ = 0;
-    segment_id_t* get_free_list_id_ptr() { return &free_list_id___; }
+    segment_id_t* get_free_list_id_ptr_() { return &free_list_id___; }
+    header_view_t get_free_list(){
+        header_view_t ret = get_header(*get_free_list_id_ptr_());
+        //dbg_destroy("free_list_validity: " << ret.is_valid() << "....." << (void*)ret.get_segment_data() << "\n");
+        if (ret.is_valid() && ret.get_is_free_segment()) return ret;
+        else return header_view_t::invalid();
+    }
+    void set_free_list(header_view_t h) { *get_free_list_id_ptr_() = h.get_segment_id(); }
 
     segment_id_t init_free_list() {
         header_view_t free_list = get_header(0);
@@ -121,8 +135,8 @@ private:
     }
 
     header_view_t alloc_segment_from_free_list() {
-        auto free_list = get_header(*get_free_list_id_ptr());
-        if (!free_list.get_is_free_segment())
+        auto free_list = get_free_list();
+        if (!free_list.is_valid())
             return header_view_t::invalid();
 
 
@@ -138,14 +152,14 @@ private:
             else {
                 auto next_free_segment = ll().next(free_list);
                 ll().disconnect_node(free_list);
-                *get_free_list_id_ptr() = next_free_segment.get_segment_id();
+                set_free_list(next_free_segment);
             }
         }
         else {
             free_list.set_segment_begin(get_segment_alignment());
             free_list.set_segment_length(free_list.get_segment_length() - get_segment_alignment());
 
-            *get_free_list_id_ptr() = shrink_segment_from_left_according_to_its_begin(free_list).get_segment_id();
+            set_free_list(shrink_segment_from_left_according_to_its_begin(free_list));
         }
         ret.set_is_free_segment(false);
         ret.set_segment_begin(0);
@@ -189,6 +203,7 @@ private:
             return true;
         }
 
+        auto free_list = get_free_list();
         auto queue_tail = ll().last(*queue_head);
 
         auto segment_size = queue_tail.get_segment_begin() + queue_tail.get_segment_length() + TMemoryPolicy::get_header_size_bytes();
@@ -200,16 +215,19 @@ private:
         }
         if (USE_LARGE_SEGMENTS()) {
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
-            dbg_enqueue("peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id());
-            if (next_block.is_valid()) dbg_enqueue(" free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n");
-            else dbg_enqueue("\n");
+            //dbg_enqueue("peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id());
+            //if (next_block.is_valid()) dbg_enqueue(" free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n");
+            //else dbg_enqueue("\n");
             if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_length() >= get_segment_alignment()) {
-                dbg_enqueue("extending block! ...");
+                //dbg_enqueue("extending block! ...");
                 next_block.set_segment_begin(get_segment_alignment());
                 next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
                 auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
-                if (next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
-                dbg_enqueue("new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n");
+                if (free_list.is_valid() && next_block.get_segment_id() == free_list.get_segment_id()) set_free_list(new_free_block_begin);
+                else {
+                    //TODO: implement
+                }
+                //dbg_enqueue("new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n");
 
                 queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
                 return true;
@@ -234,8 +252,8 @@ private:
 
         header_view_t queue_head = *out_queue_head;
 
-        queue_head.set_segment_length(queue_head.get_segment_length() - 1);
         queue_head.set_segment_begin(queue_head.get_segment_begin() + 1);
+        queue_head.set_segment_length(queue_head.get_segment_length() - 1);
 
         if (queue_head.get_segment_length() <= 0) {
             if (ll().is_single_node(queue_head)) 
@@ -245,11 +263,7 @@ private:
             
             ll().disconnect_node(queue_head);
             init_free_list_segment(queue_head);
-            auto free_list = get_header(*get_free_list_id_ptr());
-            if (!free_list.get_is_free_segment())
-                *get_free_list_id_ptr() = queue_head.get_segment_id();
-            else
-                ll().prepend_list(free_list, queue_head);
+            join_segments_into_free_list(queue_head, get_free_list());
         }
 
         return true;
@@ -274,17 +288,11 @@ private:
     void release_queue_to_freelist(header_view_t queue_head) {
         if (!queue_head.is_valid()) return;
 
-        //dbg_destroy("<destroying the queue>\n");
-
-        auto free_list = get_header(*get_free_list_id_ptr());
-        bool free_list_exists = free_list.get_is_free_segment(); //edgecase when free_list is empty and points exactly at queue_head -> we need to ask now, before we set it's free_list flag to true
-        ll().for_each(queue_head, [&](header_view_t node) {init_free_list_segment(node); });
-        if (!free_list_exists) {
-            *get_free_list_id_ptr() = queue_head.get_segment_id();
-        }
-        else {
-            ll().prepend_list(free_list, queue_head);
-        }
+        auto og_free_list = get_free_list();
+        ll().for_each(queue_head, [&](header_view_t node) {
+            init_free_list_segment(node);
+        });
+        join_segments_into_free_list(queue_head, og_free_list);
     }
 
     void init_free_list_segment(header_view_t h) {
@@ -302,7 +310,6 @@ private:
 
 
     struct header_list_access_policy {
-    public:
         header_list_access_policy(queue_pool_t *pool_):pool(pool_){}
 
         header_view_t get_next(header_view_t a) { return pool->get_header(a.get_next_segment_id()); }
@@ -310,6 +317,7 @@ private:
         void set_next(header_view_t node, header_view_t to_set) { node.set_next_segment_id(to_set.get_segment_id()); }
         void set_last(header_view_t node, header_view_t to_set) { node.set_last_segment_id(to_set.get_segment_id()); }
         bool is_same_node(header_view_t a, header_view_t b) { return a.get_segment_id() == b.get_segment_id(); }
+        bool is_null(header_view_t a) { return !a.is_valid(); }
     private:
         queue_pool_t *pool;
     };
