@@ -164,13 +164,14 @@ private:
         int bytes_count = segments_count * get_segment_alignment();
 
         auto next_part_of_this_continuous_segment = get_header(h.get_segment_id() + segments_count);
-        next_part_of_this_continuous_segment.set_segment_begin(begin - bytes_count);
-        next_part_of_this_continuous_segment.set_segment_length(h.get_segment_length());
-        next_part_of_this_continuous_segment.set_is_free_segment(h.get_is_free_segment());
+        if (next_part_of_this_continuous_segment.is_valid()) {
+            next_part_of_this_continuous_segment.set_segment_begin(begin - bytes_count);
+            next_part_of_this_continuous_segment.set_segment_length(h.get_segment_length());
+            next_part_of_this_continuous_segment.set_is_free_segment(h.get_is_free_segment());
 
-        ll().init_node(next_part_of_this_continuous_segment);
-        ll().swap_nodes(h, next_part_of_this_continuous_segment);
-
+            ll().init_node(next_part_of_this_continuous_segment);
+            ll().swap_nodes(h, next_part_of_this_continuous_segment);
+        }
         return next_part_of_this_continuous_segment;
     }
 
@@ -196,17 +197,18 @@ private:
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
             return true;
         }
-        if(false){
-            auto next_block = get_header(queue_tail.get_segment_id() + 1);
-            std::cout << "peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id();
+        if(true){
+            auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
+            std::cout << "peeking next block(" << next_block.is_valid() << ")..." << " id: " << (int)queue_tail.get_segment_id() << " -> " << (int)next_block.get_segment_id() << " < " << (int)get_max_segment_id();
             if (next_block.is_valid()) std::cout << " free(" << next_block.get_is_free_segment() << ") length : " << next_block.get_segment_length() << "\n";
             else std::cout << "\n";
             if (next_block.is_valid() && next_block.get_is_free_segment() && next_block.get_segment_length() >= get_segment_alignment()) {
-                std::cout << "extending block!\n";
+                std::cout << "extending block! ...";
                 next_block.set_segment_begin(get_segment_alignment());
                 next_block.set_segment_length(next_block.get_segment_length() - get_segment_alignment());
                 auto new_free_block_begin = shrink_segment_from_left_according_to_its_begin(next_block);
                 if (next_block.get_segment_id() == *get_free_list_id_ptr()) *get_free_list_id_ptr() = new_free_block_begin.get_segment_id();
+                std::cout << "new_free_block_id: " << (int)new_free_block_begin.get_segment_id() << "\n";
 
                 queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
                 return true;
@@ -216,7 +218,7 @@ private:
             auto new_block = alloc_segment_from_free_list(); 
             std::cout << "allocating new block(" << new_block.is_valid() << ")!...";
             if (!new_block.is_valid()) return false;
-            std::cout << ", free(" << (int)new_block.get_is_free_segment() << "), length: " << (int)new_block.get_segment_length() << "\n";
+            std::cout << "id: " << (int)new_block.get_segment_id() << ", free(" << (int)new_block.get_is_free_segment() << "), length: " << (int)new_block.get_segment_length() << "\n";
             new_block.set_segment_begin(0);
             new_block.set_segment_length(1);
             ll().insert_list(queue_tail, new_block);
@@ -238,6 +240,7 @@ private:
         if (out_byte_ptr) *out_byte_ptr = &queue_head.get_segment_data()[queue_head.get_segment_begin()];
     }
 
+    buffersize_t get_blocks_count_of_segment(header_view_t h) { return math::divide_round_up(h.get_segment_begin() + h.get_segment_length() + TMemoryPolicy::get_header_size_bytes(), get_segment_alignment()); }
 
 
     struct header_list_access_policy {
