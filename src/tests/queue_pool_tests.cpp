@@ -51,7 +51,8 @@ namespace tests{
                 break;
             std::cout << "allocated... is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
             allocated = pool.get_free_list();
-            std::cout << "free_list... is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
+            if (allocated.is_valid())std::cout << "free_list... is_free:" << allocated.get_is_free_segment() << ", id: " << (int)allocated.get_segment_id() << ", next: " << (int)allocated.get_next_segment_id() << ", last: " << (int)allocated.get_last_segment_id() << ", begin: " << allocated.get_segment_begin() << ", length: " << allocated.get_segment_length() << ",  data: " << (void*)allocated.get_segment_data() << "\n";
+            else std::cout << "free_list... <empty>\n";
         }
 
 
@@ -67,7 +68,7 @@ namespace tests{
 
 
     void QueuePoolTest::test_enqueue1() {
-        std::cout << "\n---------------------------------\n";
+        std::cout << "\n---------------------------------\n TEST_ENQUEUE1\n";
 
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10;
         byte_t buffer[BUFFER_SIZE];
@@ -85,7 +86,7 @@ namespace tests{
         printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
     }
     void QueuePoolTest::test_enqueue2() {
-        std::cout << "\n---------------------------------\n";
+        std::cout << "\n---------------------------------\n TEST_ENQUEUE2\n";
 
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE=15;
         byte_t buffer[BUFFER_SIZE];
@@ -102,11 +103,11 @@ namespace tests{
             std::cout << (int)b << " into[" << choice << "] -> " << (int)(pool.try_peak_front(pool.get_header((choice ? &q : &q2)->get_segment_id()), &bb), *bb) << " -> " << (int)buffer[i] << "\n";
         }
 
-        //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
+        printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
     }
 
     void QueuePoolTest::test_enqueue2with_destroy() {
-        std::cout << "\n---------------------------------\n";
+        std::cout << "\n---------------------------------\n TEST_ENQUEUE2_WITH_DESTROY\n";
 
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 15, ITERATIONS=1000;
         byte_t buffer[BUFFER_SIZE];
@@ -132,7 +133,7 @@ namespace tests{
 
 
     void QueuePoolTest::test_enqueue_dequeue_only_full() {
-        std::cout << "\n---------------------------------\n";
+        std::cout << "\n---------------------------------\n  TEST_ENQUEUE_DEQUEUE_ONLY_FULL\n";
 
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10, ITERATIONS=5;
         byte_t buffer[BUFFER_SIZE];
@@ -155,7 +156,7 @@ namespace tests{
         //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
     }
     void QueuePoolTest::test_enqueue_dequeue1() {
-        std::cout << "\n---------------------------------\n";
+        std::cout << "\n---------------------------------\n  TEST_ENQUEUE_DEQUEUE_1\n";
 
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10;
         byte_t buffer[BUFFER_SIZE];

@@ -110,7 +110,6 @@ private:
         return header_view_t(get_segment_start(segment_index), segment_index);
     }
     void join_segments_into_free_list(header_view_t list_head, header_view_t free_list_cached) {
-        dbg_destroy("free_list(" << free_list_cached.is_valid() << ")");
         set_free_list(ll().prepend_list(free_list_cached, list_head));
     }
 
@@ -119,7 +118,6 @@ private:
     segment_id_t* get_free_list_id_ptr_() { return &free_list_id___; }
     header_view_t get_free_list(){
         header_view_t ret = get_header(*get_free_list_id_ptr_());
-        //dbg_destroy("free_list_validity: " << ret.is_valid() << "....." << (void*)ret.get_segment_data() << "\n");
         if (ret.is_valid() && ret.get_is_free_segment()) return ret;
         else return header_view_t::invalid();
     }
