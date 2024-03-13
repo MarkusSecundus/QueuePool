@@ -32,6 +32,7 @@ namespace tests {
     };
 
     void ll_test() {
+        std::cout << "\n----------------------------------------\nLINKED LIST...\n";
         LinkedListNode a, b, c, d, e, f, g;
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy> h;
         linked_list_manipulator_t<LinkedListNode*, LinkedListNode::policy_reversed> h2;

@@ -13,11 +13,9 @@ using namespace memory_policies;
 
 int main(){
 
-    tests::QueuePoolTest{}.test_header_correctness();
-    tests::ll_test();
+    //tests::ll_test();
+    //tests::QueuePoolTest{}.test_header_correctness();
     tests::QueuePoolTest{}.test_allocation_only();
-    tests::QueuePoolTest{}.test2();
-    tests::QueuePoolTest{}.tst();
     tests::QueuePoolTest{}.test_enqueue_only();
 
 

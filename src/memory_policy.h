@@ -22,7 +22,7 @@ namespace memory_policies{
         {pol.get_segment_length()} -> std::convertible_to<buffersize_t>;
         {pol.set_segment_length(buffersize)} -> std::convertible_to<void>;
 
-        {pol.get_segment_end()} -> std::convertible_to<buffersize_t>;
+        //{pol.get_segment_end()} -> std::convertible_to<buffersize_t>;
 
         {pol.get_is_free_segment()} -> std::convertible_to<bool>;
         {pol.set_is_free_segment(flag)} -> std::convertible_to<void>;
@@ -93,7 +93,7 @@ namespace memory_policies{
                 auto packed = get_header();
                 return packed->segment_length_lower | (packed->segment_length_upper << 8);
             }
-            buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length()-1;}
+            //buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length()-1;}
 
             void set_segment_length(buffersize_t value) {
                 auto packed = get_header();
@@ -137,8 +137,8 @@ namespace memory_policies{
             };//fields do not really need to be packed in memory exactly in the order they are written, just being 4 bytes long is enough
             static_assert(sizeof(packed_header_t) == 4, "Segment header is supposed to take exactly 5 bytes");
 
-            segment_id_t segment_id;
             byte_t* header_ptr_raw;
+            segment_id_t segment_id;
             packed_header_t* get_header() { return reinterpret_cast<packed_header_t*>(header_ptr_raw); }
             long_segment_begin_info_t::first_byte_t* get_begin_info_extension_header_first_byte_only() { return reinterpret_cast<long_segment_begin_info_t::first_byte_t*>(header_ptr_raw + get_header_size_bytes()); }
             long_segment_begin_info_t* get_begin_info_extension_header() { return reinterpret_cast<long_segment_begin_info_t*>(get_begin_info_extension_header_first_byte_only()); }
