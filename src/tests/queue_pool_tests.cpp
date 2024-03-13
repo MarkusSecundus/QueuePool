@@ -56,6 +56,34 @@ namespace tests{
             std::cout << (int)buffer[i] << "\n";
     }
 
+    void QueuePoolTest::test_header_correctness(){
+        std::cout << "\n----------------------------------------\nHEADER CORRECTNESS...\n";
+
+        byte_t buffer[40];
+        using header_t = standard_memory_policy<20>::segment_header_view_t;
+        header_t h(buffer, 0);
+
+
+#define TEST(setter, getter) \
+        std::cout << "Testing " #setter "\n";\
+        h.setter(0);\
+        for (;; ) {\
+            auto current = h.getter();\
+            h.setter(current + 1);\
+            auto next = h.getter();\
+            if (next != current + 1) {\
+                if (next == 0) { std::cout << "limit is: " << (std::size_t)current << "\n"; break; }\
+                else std::cout << "!skip " << (std::size_t)current << " -> " << (std::size_t)next << "\n";\
+            }\
+        }
+
+        TEST(set_segment_begin, get_segment_begin);
+        TEST(set_segment_length, get_segment_length);
+        TEST(set_last_segment_id, get_last_segment_id);
+        TEST(set_next_segment_id, get_next_segment_id);
+#undef TEST
+    }
+
     void QueuePoolTest::test2() {
         std::cout << "\n---------------------------------\n";
 
