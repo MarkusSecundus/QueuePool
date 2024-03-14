@@ -30,6 +30,7 @@ namespace tests{
 
     void ll_test();
     void ll_node_swap_test();
+    void ll_randomized_test();
 
 }
 

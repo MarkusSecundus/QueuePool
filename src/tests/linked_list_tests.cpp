@@ -1,7 +1,12 @@
 #include<iostream>
+#include<vector>
+#include<random>
+#include<climits>
 
 #include "tests.h"
 #include "../linked_list.h"
+
+
 
 using namespace linked_lists;
 
@@ -9,7 +14,7 @@ using namespace linked_lists;
 namespace tests {
 
     struct LinkedListNode {
-        LinkedListNode(int value_) :value(value_), last(this), next(this) {}
+        LinkedListNode(int value_) :next(this), last(this), value(value_) {}
         LinkedListNode* next, * last;
         int value;
 
@@ -247,6 +252,105 @@ namespace tests {
         TEST_PRINT(d);
 
 
-    }
 #undef TEST_PRINT
+    }
+
+
+    template<int LIST_CREATE_PROB, int LIST_DESTROY_PROB, int ELEMENT_REMOVE_PROB, int ELEMENT_SWAP_PROB, std::size_t ITERATIONS>
+    void ll_randomized_test_impl() {
+        std::cout << "\n----------------------------------------\nLINKED LIST RANDOMIZED(iterations="<<ITERATIONS<<", list_create=1/"<< LIST_CREATE_PROB<<", list_destroy=1/"<<LIST_DESTROY_PROB<<", remove_elem=1/"<<ELEMENT_REMOVE_PROB<<", swap_elem=1/"<<ELEMENT_SWAP_PROB<<")...\n";
+        using n = LinkedListNode*;
+        using nr = LinkedListNode;
+        using v = std::vector<int>;
+        linked_list_manipulator_t<n, LinkedListNode::policy> h;
+
+
+        std::random_device rd;  // a seed source for the random number engine
+        std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+        std::uniform_int_distribution<int> distrib(0, INT_MAX);
+
+        std::vector<n> lists;
+        std::vector<v> std_lists;
+
+        std::size_t max_length = 0, max_lists_count=0;
+
+        auto validate = [&](std::size_t t, int index, n node, v* std) {
+
+            if(!h.validate_list(node))
+                std::cout << t << ")... id(" << index << ") - validation error\n";
+            auto ll_length = h.length(node);
+            if (ll_length != std->size())
+                std::cout << t << ")... id(" << index << ") - sizes: " << ll_length << " vs " << std->size() << "\n";
+
+            max_length = std::max(max_length, ll_length);
+
+            std::size_t i = 0;
+            h.for_each(node, [&](n nn) {
+                if (nn->value != std->operator[](i))
+                    std::cout << t << ")... id(" << index << ") - values at pos " << i << ": >" << nn->value << " vs " << std->operator[](i) << "\n";
+                ++i;
+                });
+            };
+        
+        for (std::size_t t = 0; t < ITERATIONS; ++t) {
+            int rand = distrib(gen);
+            int index = rand % (std_lists.size()?std_lists.size():1);
+
+            max_lists_count = std::max(max_lists_count, std_lists.size());
+
+            if (std_lists.size() > 0)
+                validate(t, index, lists[index], &std_lists[index]);
+
+            if ((std_lists.size()==0) || !(distrib(gen) % LIST_CREATE_PROB)) {
+                n new_node = new nr(rand);
+                h.init_node(new_node);
+                lists.emplace_back(new_node);
+                std_lists.emplace_back(v{ rand });
+            }
+            else if (!(distrib(gen) % LIST_DESTROY_PROB)) {
+                int index2 = distrib(gen) % std_lists.size();
+                if (index == index2) continue;
+                n to_join = lists[index2];
+                v to_join_std = std::move(std_lists[index2]);
+                lists[index] = h.prepend_list(lists[index], to_join);
+                for (int i : to_join_std) std_lists[index].push_back(i);
+                lists.erase(lists.begin() + index2);
+                std_lists.erase(std_lists.begin() + index2);
+            }
+            else if (!(distrib(gen) % ELEMENT_SWAP_PROB)) {
+                int index2 = distrib(gen) % std_lists.size();
+                if (index == index2) continue;
+                //TODO: implement
+            }
+            else if (!(distrib(gen) % ELEMENT_REMOVE_PROB)) {
+                continue;
+                if (std_lists[index].size() <= 1) {
+                    delete lists[index];
+                    lists.erase(lists.begin() + index);
+                    std_lists.erase(std_lists.begin() + index);
+                }
+                else {
+                    auto to_delete = lists[index];
+                    lists[index] = h.disconnect_node(lists[index]);
+                    delete to_delete;
+                    std_lists[index].erase(std_lists[index].begin());
+                }
+            }
+            else {
+                n new_node = new nr(rand);
+                h.init_node(new_node);
+                h.prepend_list(lists[index], new_node);
+                std_lists[index].emplace_back(rand);
+            }
+        }
+        std::cout << "test finished(max_list_length=" << max_length << ", max_lists_count="<<max_lists_count<< ").\n";
+    }
+
+    void ll_randomized_test() {
+        ll_randomized_test_impl<300,300,6, 100, 50000>();
+        ll_randomized_test_impl<100,100,6, 100, 50000>();
+        ll_randomized_test_impl<200,200,2, 100, 50000>();
+        ll_randomized_test_impl<5,5,2, 100, 50000>();
+        ll_randomized_test_impl<2,2,2, 100, 50000>();
+    }
 }
