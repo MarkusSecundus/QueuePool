@@ -23,9 +23,9 @@ int main(){
     //tests::QueuePoolTest{}.test_enqueue2();
     //tests::QueuePoolTest{}.test_enqueue_dequeue1();
     //tests::QueuePoolTest{}.test_enqueue2with_destroy();
-    //tests::QueuePoolTest{}.test_queue_randomized();
+    tests::QueuePoolTest{}.test_queue_randomized();
     //tests::QueuePoolTest{}.test_queue_randomized_with_destroy();
-    tests::ll_randomized_test();
+    //tests::ll_randomized_test();
 
 
     return 0;

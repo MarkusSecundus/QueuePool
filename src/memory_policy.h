@@ -51,7 +51,7 @@ namespace memory_policies{
         static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
         static constexpr buffersize_t get_max_addresable_memory_bytes() { return SEGMENT_ALIGNMENT * (1<<7); }
 
-        using segment_id_t = std::uint8_t;
+        using segment_id_t = std::uint16_t;
 
         struct segment_header_view_t {
         public:
@@ -106,7 +106,7 @@ namespace memory_policies{
             bool get_is_free_segment() { return get_header()->is_free_segment; }
             void set_is_free_segment(bool value) { get_header()->is_free_segment = value; }
 
-            byte_t* get_segment_data() { return header_ptr_raw + get_header_size_bytes(); }
+            byte_t* get_segment_data() { return reinterpret_cast<byte_t*>(header_ptr_raw) + get_header_size_bytes(); }
 
             segment_id_t get_segment_id() { return segment_id; }
 
@@ -140,10 +140,10 @@ namespace memory_policies{
             };//fields do not really need to be packed in memory exactly in the order they are written, just being 4 bytes long is enough
             static_assert(sizeof(packed_header_t) == 4, "Segment header is supposed to take exactly 5 bytes");
 
-            byte_t* header_ptr_raw;
+            void* header_ptr_raw;
             segment_id_t segment_id;
             packed_header_t* get_header() { return reinterpret_cast<packed_header_t*>(header_ptr_raw); }
-            long_segment_begin_info_t::first_byte_t* get_begin_info_extension_header_first_byte_only() { return reinterpret_cast<long_segment_begin_info_t::first_byte_t*>(header_ptr_raw + get_header_size_bytes()); }
+            long_segment_begin_info_t::first_byte_t* get_begin_info_extension_header_first_byte_only() { return reinterpret_cast<long_segment_begin_info_t::first_byte_t*>(reinterpret_cast<byte_t*>(header_ptr_raw) + get_header_size_bytes()); }
             long_segment_begin_info_t* get_begin_info_extension_header() { return reinterpret_cast<long_segment_begin_info_t*>(get_begin_info_extension_header_first_byte_only()); }
         };
     };

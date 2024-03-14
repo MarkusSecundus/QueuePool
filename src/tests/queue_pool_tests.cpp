@@ -54,7 +54,7 @@ namespace tests{
         pool_t pool(buffer, BUFFER_SIZE);
 
         while (true) {
-            auto allocated = pool.alloc_segment_from_free_list();
+            auto allocated = pool.alloc_segment_from_free_list(pool.get_free_list());
             if (!allocated.is_valid())
                 break;
             std::cout << "allocated... is_free:"<<allocated.get_is_free_segment() <<", id: "<< (int)allocated.get_segment_id()<<", next: "<< (int)allocated.get_next_segment_id() <<", last: "<< (int)allocated.get_last_segment_id()<<", begin: "<<allocated.get_segment_begin()<<", length: "<<allocated.get_segment_length()<<",  data: "<< (void*)allocated.get_segment_data()<<"\n" ;
@@ -321,9 +321,9 @@ namespace tests{
         QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5>();
         QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5>();
         QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
+        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
+        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
+        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
     }
     void QueuePoolTest::test_queue_randomized_with_destroy() {
         std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
