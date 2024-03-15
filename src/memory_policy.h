@@ -56,12 +56,21 @@ namespace memory_policies{
         struct segment_header_view_t {
         public:
             friend standard_memory_policy;
-            segment_header_view_t(byte_t* segment_start, segment_id_t segment_index) : header_ptr_raw(segment_start), segment_id(segment_index){}
+            segment_header_view_t(byte_t* segment_start, segment_id_t segment_index) : header_ptr_raw(segment_start), segment_id(segment_index)
+            {
+                if (!is_valid()) return;
+                _dbg__begin = get_segment_begin();
+                _dbg__length = get_segment_length();
+                _dbg__next = get_next_segment_id();
+                _dbg__last = get_last_segment_id();
+                _dbg__is_freelist = get_is_free_segment();
+                _dbg___last_first_4_bytes = get_header()->_last_first_4_bytes;
+            }
 
             segment_id_t get_next_segment_id() { return get_header()->next_segment; }
-            void set_next_segment_id(segment_id_t value) { get_header()->next_segment = (byte_t)(value); }
+            void set_next_segment_id(segment_id_t value) { _dbg__next = value; get_header()->next_segment = (byte_t)(value); }
             segment_id_t get_last_segment_id(){ return get_header()->last_segment; }
-            void set_last_segment_id(segment_id_t value) { get_header()->last_segment = (byte_t)(value); }
+            void set_last_segment_id(segment_id_t value) { _dbg__last = value; get_header()->last_segment = (byte_t)(value); get_header()->_last_first_4_bytes = (byte_t)value; }
 
             buffersize_t get_segment_begin() {
                 if (get_header()->is_full_from_begin) return 0;
@@ -74,6 +83,7 @@ namespace memory_policies{
                 }
             }
             void set_segment_begin(buffersize_t value) {
+                _dbg__begin = value;
                 bool is_full_from_begin = (value == 0);
                 get_header()->is_full_from_begin = is_full_from_begin;
                 if (!is_full_from_begin) {
@@ -99,12 +109,13 @@ namespace memory_policies{
             //buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length()-1;}
 
             void set_segment_length(buffersize_t value) {
+                _dbg__length = value;
                 auto packed = get_header();
                 packed->segment_length_lower = (byte_t)(value & 0xFF);
                 packed->segment_length_upper = (byte_t)((value & 0xF00) >> 8);
             }
             bool get_is_free_segment() { return get_header()->is_free_segment; }
-            void set_is_free_segment(bool value) { get_header()->is_free_segment = value; }
+            void set_is_free_segment(bool value) { _dbg__is_freelist = value; get_header()->is_free_segment = value; }
 
             byte_t* get_segment_data() { return reinterpret_cast<byte_t*>(header_ptr_raw) + get_header_size_bytes(); }
 
@@ -137,6 +148,7 @@ namespace memory_policies{
                 byte_t is_full_from_begin : 1;
                 byte_t segment_length_lower;
                 byte_t segment_length_upper : 4;
+                byte_t _last_first_4_bytes : 4;
             };//fields do not really need to be packed in memory exactly in the order they are written, just being 4 bytes long is enough
             static_assert(sizeof(packed_header_t) == 4, "Segment header is supposed to take exactly 5 bytes");
 
@@ -145,6 +157,9 @@ namespace memory_policies{
             packed_header_t* get_header() { return reinterpret_cast<packed_header_t*>(header_ptr_raw); }
             long_segment_begin_info_t::first_byte_t* get_begin_info_extension_header_first_byte_only() { return reinterpret_cast<long_segment_begin_info_t::first_byte_t*>(reinterpret_cast<byte_t*>(header_ptr_raw) + get_header_size_bytes()); }
             long_segment_begin_info_t* get_begin_info_extension_header() { return reinterpret_cast<long_segment_begin_info_t*>(get_begin_info_extension_header_first_byte_only()); }
+
+
+            segment_id_t _dbg__last, _dbg__next, _dbg___last_first_4_bytes; buffersize_t _dbg__begin, _dbg__length; bool _dbg__is_freelist;
         };
     };
 

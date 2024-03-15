@@ -31,12 +31,10 @@ namespace linked_lists{
 
         TNode next(TNode n) {
             TNodeAccessPolicy& p(accessor_policy());
-            if (p.is_null(n)) return n;
             return p.get_next(n);
         }
         TNode last(TNode n) {
             TNodeAccessPolicy& p(accessor_policy());
-            if (p.is_null(n)) return n;
             return p.get_last(n);
         }
 
@@ -103,13 +101,11 @@ namespace linked_lists{
 
         bool is_single_node(TNode a) {
             TNodeAccessPolicy& p(accessor_policy());
-            if (p.is_null(a)) return true;
             return p.is_same_node(a, p.get_next(a));
         }
 
         std::size_t length(TNode a) {
             TNodeAccessPolicy& p(accessor_policy());
-            if (p.is_null(a)) return 0;
             std::size_t ret = 0;
             for_each(a, [&](TNode n) {++ret; });
             return ret;
@@ -129,7 +125,6 @@ namespace linked_lists{
         template<typename TFunc>
         void for_each(TNode begin, TFunc iteration) {
             TNodeAccessPolicy& p(accessor_policy());
-            if (p.is_null(begin)) return;
 
             TNode a = begin, last = p.get_last(begin);
             for (;;) {

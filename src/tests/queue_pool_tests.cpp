@@ -33,9 +33,25 @@ namespace tests{
             if (!handle.is_valid()) {
                 wrt << "<empty>\n"; return;
             }
-            pool.ll().for_each(pool.get_header(handle.get_segment_id()), [&](auto header) {
-                wrt << (int) header.get_segment_id() << " -> ";
-                });
+            auto h = pool.get_header(handle.get_segment_id());
+            auto begin = h;
+            while (true) {
+                if (h.is_valid()) {
+                    wrt << (int)h.get_segment_id() << "(" << pool.get_blocks_count_of_segment(h);
+                    if (h.get_is_free_segment())
+                        wrt << "f";
+                    wrt << ") -> ";
+                }
+                else {
+                    wrt << "<nil>";
+                    break;
+                }
+                h = pool.ll().next(h);
+                if (h.get_segment_id() == begin.get_segment_id())
+                    break;
+            }
+            if (!pool.ll().validate_list(h))
+                wrt << "(invalid) ";
             wrt << "\n";
         }
 
@@ -127,6 +143,12 @@ namespace tests{
         auto q2 = pool.make_queue();
 
         for (std::size_t b = 0; b < ITERATIONS; ++b) {
+
+            //Helper{}.printout_queue(std::cout << "q   : ", pool, q);
+            //Helper{}.printout_queue(std::cout << "q2  : ", pool, q2);
+            //Helper{}.printout_queue(std::cout << "free: ", pool, pool.get_free_list());
+
+
             bool choice = std::rand() & 1;
             if (!pool.try_enqueue_byte(choice ? &q2 : &q, (byte_t)b)) {
                 std::cout << b << "... !full - destroying queue " << choice <<"\n";
@@ -174,7 +196,7 @@ namespace tests{
     void QueuePoolTest::test_enqueue_dequeue1() {
         std::cout << "\n---------------------------------\n  TEST_ENQUEUE_DEQUEUE_1\n";
 
-        constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10;
+        constexpr int BUFFER_SIZE = 64, BLOCK_SIZE = 12;
         byte_t buffer[BUFFER_SIZE];
 
         using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
@@ -217,6 +239,8 @@ namespace tests{
 
             for (std::size_t op_ = 0; op_ < OPERATIONS_COUNT; ++op_) {
                 int queue_index = std::rand() % QUEUES_COUNT;
+
+                //Helper{}.printout_queue(std::cout, pool, queues[queue_index]);
 
                 if (std::rand() % DEQUEUE_CHANCE) { //enqueue
                     if (std_queues[queue_index].size() >= MAX_ELEMENTS_IN_QUEUE) {
@@ -283,7 +307,7 @@ namespace tests{
                     }
                     byte_t to_enqueue = (byte_t)std::rand();
                     if (!pool.try_enqueue_byte(&(queues[queue_index]), to_enqueue)) {
-                        std::cout << op_ << ")... " << "cannot enqueue value " << (int)to_enqueue << " to queue n." << queue_index << "\n";
+                        //std::cout << op_ << ")... " << "cannot enqueue value " << (int)to_enqueue << " to queue n." << queue_index << "\n";
                         continue;
                     }
                     std_queues[queue_index].push_back(to_enqueue);
@@ -316,14 +340,23 @@ namespace tests{
     void QueuePoolTest::test_queue_randomized() {
         std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
 
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<2048, 24, 15, 50000, 120, 2>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
-        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
-        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
-        //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
+        for (int t = 0; t < 1; ++t) {
+            std::cout << t << ")... \n\n";
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<2048, 24, 15, 50000, 120, 2>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5>();
+            // QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
+
+
+
+            //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 1, 50000, 1800, 5>();
+            //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<64, 12, 1, 50000, 50, 5>();
+        }
+
     }
     void QueuePoolTest::test_queue_randomized_with_destroy() {
         std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
