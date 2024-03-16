@@ -15,8 +15,8 @@ namespace queue_pooling{
 
 
 
-template<memory_policy TMemoryPolicy=standard_memory_policy<20>>
-struct queue_pool_t {
+template<memory_policy TMemoryPolicy=standard_memory_policy>
+class queue_pool_t : private TMemoryPolicy{
 
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
@@ -41,8 +41,8 @@ public:
     };
 
 
-
-    queue_pool_t(byte_t* buffer, buffersize_t buffer_size) : buffer_raw_(buffer), buffer_size_raw_(buffer_size) {
+    template<typename ...Args>
+    queue_pool_t(byte_t* buffer, buffersize_t buffer_size, bool use_multiblock_segments_, Args ...args) : TMemoryPolicy(args...),  buffer_raw_(buffer), buffer_size_raw_(buffer_size), use_multiblock_segments(use_multiblock_segments_) {
         if (buffer_size > TMemoryPolicy::get_max_addresable_memory_bytes())
             throw std::runtime_error("buffer is too big!");
         *get_free_list_id_ptr_() = init_free_list();
@@ -60,12 +60,6 @@ public:
             return true;
         }
         return false;
-    }
-    bool try_peek_byte(queue_handle_t* handle_ptr, byte_t* out_byte) {
-        if (!handle_ptr->is_valid())
-            return false;
-
-        return try_peak_back(get_header(handle_ptr->get_segment_id()), &out_byte);
     }
     bool try_dequeue_byte(queue_handle_t* handle_ptr, byte_t* out_byte) {
         if (!handle_ptr->is_valid())
@@ -85,7 +79,6 @@ public:
     void destroy_queue(queue_handle_t* handle_ptr)
     {
         if (!handle_ptr->is_valid())return;
-
         release_queue_to_freelist(get_header(handle_ptr->get_segment_id()));
         *handle_ptr = queue_handle_t::empty();
     }
@@ -93,22 +86,24 @@ public:
 
 private:
     using header_view_t = typename TMemoryPolicy::segment_header_view_t;
-    static constexpr buffersize_t get_segment_alignment() { return TMemoryPolicy::get_segment_alignment(); }
+    constexpr buffersize_t get_block_size_bytes() { return TMemoryPolicy::get_block_size_bytes(); }
+    buffersize_t get_header_size_bytes(){return TMemoryPolicy::get_header_size_bytes();}
 
     byte_t* buffer_raw_;
     buffersize_t buffer_size_raw_;
+    bool use_multiblock_segments;
 
 
     byte_t* get_buffer() { return buffer_raw_; }
     //buffersize_t get_buffer_size() { return buffer_size_raw; }
-    buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_segment_alignment(); }
+    buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_block_size_bytes(); }
 
-    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_segment_alignment()]); }
-    segment_id_t get_max_segment_id() { return (segment_id_t)(buffer_size_raw_ / get_segment_alignment()); }
+    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_block_size_bytes()]); }
+    segment_id_t get_max_segment_id() { return (segment_id_t)(buffer_size_raw_ / get_block_size_bytes()); }
 
     header_view_t get_header(segment_id_t segment_index) {
-        if (segment_index < 0 || segment_index >= get_max_segment_id()) return header_view_t(nullptr, segment_index);
-        return header_view_t(get_segment_start(segment_index), segment_index);
+        if (segment_index < 0 || segment_index >= get_max_segment_id() || !queue_handle_t(segment_index).is_valid() ) return header_view_t::invalid();
+        return TMemoryPolicy::make_header_view(get_segment_start(segment_index), segment_index);
     }
     void join_segments_into_free_list(header_view_t list_head, header_view_t free_list_cached) {
         set_free_list(ll().insert_list(free_list_cached, list_head));
@@ -134,7 +129,7 @@ private:
         ll().init_node(free_list);
         free_list.set_is_free_segment(true);
         free_list.set_segment_begin(0);
-        free_list.set_segment_length(get_allocatable_buffer_size() - TMemoryPolicy::get_header_size_bytes());
+        free_list.set_segment_length(get_allocatable_buffer_size() - get_header_size_bytes());
         return free_list.get_segment_id();
     }
 
@@ -143,8 +138,6 @@ private:
         if (!free_list.is_valid())
             return header_view_t::invalid();
 
-
-        //if (free_list.get_segment_begin() != 0) throw std::runtime_error("This should not happen!");
 
         auto ret = free_list;
         auto free_list_remaining_blocks = get_blocks_count_of_segment(free_list);
@@ -162,8 +155,8 @@ private:
             }
         }
         else {
-            free_list.set_segment_begin(get_segment_alignment());
-            free_list.set_segment_length(free_list.get_segment_length() - get_segment_alignment());
+            free_list.set_segment_begin(get_block_size_bytes());
+            free_list.set_segment_length(free_list.get_segment_length() - get_block_size_bytes());
 
             set_free_list(shrink_segment_from_left_according_to_its_begin(free_list));
         }
@@ -178,10 +171,10 @@ private:
         if (!h.is_valid()) return h;
 
         auto begin = h.get_segment_begin();
-        int segments_count = begin / get_segment_alignment();
+        int segments_count = begin / get_block_size_bytes();
         if (segments_count <= 0)
             return h;
-        int bytes_count = segments_count * get_segment_alignment();
+        int bytes_count = segments_count * get_block_size_bytes();
 
         auto _dbg__max_segment_id = get_max_segment_id();
         auto next_part_of_this_continuous_segment = get_header(h.get_segment_id() + segments_count);
@@ -202,7 +195,7 @@ private:
         }
         ll().init_node(h);
         h.set_segment_begin(0);
-        h.set_segment_length(segments_count * get_segment_alignment() - TMemoryPolicy::get_header_size_bytes());
+        h.set_segment_length(segments_count * get_block_size_bytes() - get_header_size_bytes());
         return next_part_of_this_continuous_segment;
     }
 
@@ -214,7 +207,7 @@ private:
             auto ret = alloc_segment_from_free_list(get_free_list());
             if (!ret.is_valid()) return false;
             ret.set_segment_length(1);
-            //dbg_enqueue("initializing queue! " << (int)(ret.get_segment_begin() + ret.get_segment_length() + TMemoryPolicy::get_header_size_bytes()) << " / " << (int)get_segment_alignment() << "\n");
+            //dbg_enqueue("initializing queue! " << (int)(ret.get_segment_begin() + ret.get_segment_length() + get_header_size_bytes()) << " / " << (int)get_segment_alignment() << "\n");
             *queue_head = ret;
             return true;
         }
@@ -226,7 +219,7 @@ private:
             return true;
         }
 
-        if (USE_LARGE_SEGMENTS()) {
+        if (use_multiblock_segments) {
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
             dbg_enqueue("growing(" << next_block.is_valid() <<") " << (int)queue_tail.get_segment_id() << "(" << (int)get_blocks_count_of_segment(queue_tail) << ") -> " << (int)next_block.get_segment_id() << "\n");
 
@@ -250,7 +243,6 @@ private:
         }
         return true;
     }
-    static constexpr bool USE_LARGE_SEGMENTS() { return true; }
 
     bool try_shrink_queue_by_1(header_view_t* out_queue_head) {
         
@@ -315,15 +307,14 @@ private:
         if (!h.is_valid()) return;
         auto blocks_count = get_blocks_count_of_segment(h);
         h.set_segment_begin(0);
-        h.set_segment_length(blocks_count * get_segment_alignment() - TMemoryPolicy::get_header_size_bytes());
+        h.set_segment_length(blocks_count * get_block_size_bytes() - get_header_size_bytes());
         h.set_is_free_segment(true);
     }
 
 
-
     buffersize_t get_blocks_count_of_segment(header_view_t h, buffersize_t additional_bytes) {
         if (!h.is_valid()) return 0;
-        return math::divide_round_up(h.get_segment_begin() + h.get_segment_length() + TMemoryPolicy::get_header_size_bytes() + additional_bytes, get_segment_alignment()); 
+        return math::divide_round_up(h.get_segment_begin() + h.get_segment_length() + get_header_size_bytes() + additional_bytes, get_block_size_bytes()); 
     }
     buffersize_t get_blocks_count_of_segment(header_view_t h) { return get_blocks_count_of_segment(h, 0); }
 

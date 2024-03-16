@@ -65,9 +65,9 @@ namespace tests{
         constexpr int BUFFER_SIZE = 512;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<20>>;
+        using pool_t = queue_pool_t<standard_memory_policy>;
 
-        pool_t pool(buffer, BUFFER_SIZE);
+        pool_t pool(buffer, BUFFER_SIZE, false, 20);
 
         while (true) {
             auto allocated = pool.alloc_segment_from_free_list(pool.get_free_list());
@@ -84,7 +84,6 @@ namespace tests{
 
         auto q = pool.make_queue();
         byte_t byte;
-        std::cout << pool.try_peek_byte(&q, &byte) <<"\n";
         auto header = pool.get_header(q.get_segment_id());
         std::cout << pool.try_grow_queue_by_1(&header) <<"\n";
     }
@@ -97,8 +96,8 @@ namespace tests{
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
-        pool_t pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy>;
+        pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
 
         auto q = pool.make_queue();
         std::size_t i = 0;
@@ -115,8 +114,8 @@ namespace tests{
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE=5;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
-        pool_t pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy>;
+        pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
 
         auto q = pool.make_queue();
         auto q2 = pool.make_queue();
@@ -136,8 +135,8 @@ namespace tests{
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10, ITERATIONS=800;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
-        pool_t pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy>;
+        pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
         
         auto q = pool.make_queue();
         auto q2 = pool.make_queue();
@@ -176,8 +175,8 @@ namespace tests{
         constexpr int BUFFER_SIZE = 70, BLOCK_SIZE = 10, ITERATIONS=5;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
-        pool_t pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy>;
+        pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
 
         for (int it = 0; it < ITERATIONS; ++it) {
             auto q = pool.make_queue();
@@ -199,8 +198,8 @@ namespace tests{
         constexpr int BUFFER_SIZE = 64, BLOCK_SIZE = 12;
         byte_t buffer[BUFFER_SIZE];
 
-        using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
-        pool_t pool(buffer, BUFFER_SIZE);
+        using pool_t = queue_pool_t<standard_memory_policy>;
+        pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
 
         auto q = pool.make_queue();
         std::size_t i = 0;
@@ -225,10 +224,10 @@ namespace tests{
         void test_queue_randomized_impl() {
             std::cout << "\n***********************\nRANDOMIZED_TEST(buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ")\n";
 
-            using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
+            using pool_t = queue_pool_t<standard_memory_policy>;
 
             byte_t buffer[BUFFER_SIZE];
-            pool_t pool(buffer, BUFFER_SIZE);
+            pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
             
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
             std::array<typename std::deque<byte_t>, QUEUES_COUNT> std_queues{};
@@ -279,10 +278,10 @@ namespace tests{
         void test_queue_randomized_with_destroy_impl() {
             std::cout << "\n***********************\nRANDOMIZED_TEST(buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ", destroy=1/"<<DESTROY_CHANCE<< ")\n";
 
-            using pool_t = queue_pool_t<standard_memory_policy<BLOCK_SIZE>>;
+            using pool_t = queue_pool_t<standard_memory_policy>;
 
             byte_t buffer[BUFFER_SIZE];
-            pool_t pool(buffer, BUFFER_SIZE);
+            pool_t pool(buffer, BUFFER_SIZE, false, 20);
             
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
             std::array<typename std::deque<byte_t>, QUEUES_COUNT> std_queues{};
@@ -346,7 +345,7 @@ namespace tests{
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2>();
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5>();
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5>();
-            // QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
+             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
@@ -396,8 +395,9 @@ namespace tests{
         std::cout << "\n----------------------------------------\nHEADER CORRECTNESS...\n";
 
         byte_t buffer[40];
-        using header_t = standard_memory_policy<20>::segment_header_view_t;
-        header_t h(buffer, 0);
+        standard_memory_policy pol(20);
+        using header_t = standard_memory_policy::segment_header_view_t;
+        header_t h = pol.make_header_view(buffer, 0);
 
 
 #define TEST(setter, getter) \

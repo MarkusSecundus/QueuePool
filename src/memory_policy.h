@@ -8,8 +8,6 @@ namespace memory_policies{
     template<typename THeaderView>
     concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer)
     {
-        {THeaderView(bytebuffer, segment_id)} -> std::convertible_to<THeaderView>;
-
         {pol.get_next_segment_id()} -> std::convertible_to<segment_id_t>;
         {pol.set_next_segment_id(segment_id)} -> std::convertible_to<void>;
 
@@ -36,25 +34,21 @@ namespace memory_policies{
         {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
     };
     template<typename THeaderPolicy>
-    concept memory_policy = requires(THeaderPolicy pol, byte_t *byteptr, segment_id_t segment_id){
+    concept memory_policy = 
+        header_view<typename THeaderPolicy::segment_header_view_t> &&
+        requires (THeaderPolicy pol, byte_t *byteptr, typename THeaderPolicy::segment_id_t segment_id){
         {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<buffersize_t>;
-        {THeaderPolicy::get_segment_alignment()} -> std::convertible_to<buffersize_t>;
-        {THeaderPolicy::get_max_addresable_memory_bytes()} -> std::convertible_to<buffersize_t>;
-    } && header_view<typename THeaderPolicy::segment_header_view_t> 
+        {pol.get_block_size_bytes()} -> std::convertible_to<buffersize_t>;
+        {pol.get_max_addresable_memory_bytes()} -> std::convertible_to<buffersize_t>;
+        {pol.make_header_view(byteptr, segment_id)} -> std::convertible_to<typename THeaderPolicy::segment_header_view_t>;
+    }
     && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
 
 
-    template<buffersize_t SEGMENT_ALIGNMENT>
     struct standard_memory_policy {
     public:
-        static constexpr buffersize_t get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
-        static constexpr buffersize_t get_segment_alignment() { return SEGMENT_ALIGNMENT; }
-        static constexpr buffersize_t get_max_addresable_memory_bytes() { return SEGMENT_ALIGNMENT * (1<<7); }
-
-        using segment_id_t = std::uint16_t;
-
         struct segment_header_view_t {
-        public:
+        private:
             friend standard_memory_policy;
             segment_header_view_t(byte_t* segment_start, segment_id_t segment_index) : header_ptr_raw(segment_start), segment_id(segment_index)
             {
@@ -66,7 +60,7 @@ namespace memory_policies{
                 _dbg__is_freelist = get_is_free_segment();
                 _dbg___last_first_4_bytes = get_header()->_last_first_4_bytes;
             }
-
+        public:
             segment_id_t get_next_segment_id() { return get_header()->next_segment; }
             void set_next_segment_id(segment_id_t value) { _dbg__next = value; get_header()->next_segment = (byte_t)(value); }
             segment_id_t get_last_segment_id(){ return get_header()->last_segment; }
@@ -121,13 +115,13 @@ namespace memory_policies{
 
             segment_id_t get_segment_id() { return segment_id; }
 
-            byte_t* get_segment_data_raw() { return header_ptr_raw; }
+            byte_t* get_segment_data_raw() { return reinterpret_cast<byte_t*>(header_ptr_raw); }
 
 
             bool is_valid() { return (bool)header_ptr_raw; }
             static segment_header_view_t invalid() { return segment_header_view_t(NULL, 0); }
         private:
-            
+
             struct long_segment_begin_info_t {
                 struct first_byte_t {
                     byte_t lower_7_bits : 7;
@@ -161,6 +155,19 @@ namespace memory_policies{
 
             segment_id_t _dbg__last, _dbg__next, _dbg___last_first_4_bytes; buffersize_t _dbg__begin, _dbg__length; bool _dbg__is_freelist;
         };
+
+
+        standard_memory_policy(buffersize_t block_size_) : block_size(block_size_) {}
+
+        static constexpr buffersize_t get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
+        buffersize_t get_block_size_bytes() { return block_size; }
+        buffersize_t get_max_addresable_memory_bytes() { return block_size * (1 << 7); }
+        segment_header_view_t make_header_view(byte_t* segment_start, segment_id_t segment_index) { return segment_header_view_t(segment_start, segment_index); }
+
+
+        using segment_id_t = std::uint16_t;
+    private:
+        buffersize_t block_size;
     };
 
 }
