@@ -4,6 +4,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
 
 #include<iostream>
 #include<cstddef>
@@ -17,6 +18,7 @@ using segment_id_t = std::uint32_t;
 
 
 #define dbg(...) ((void)(std::cout << __VA_ARGS__))
+
 
 
 

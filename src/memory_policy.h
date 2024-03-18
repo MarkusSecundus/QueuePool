@@ -6,7 +6,7 @@
 namespace memory_policies{
         
     template<typename THeaderView>
-    concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer)
+    concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer, THeaderView view_a, THeaderView view_b)
     {
         {pol.get_next_segment_id()} -> std::convertible_to<segment_id_t>;
         {pol.set_next_segment_id(segment_id)} -> std::convertible_to<void>;
@@ -30,6 +30,8 @@ namespace memory_policies{
         {pol.is_valid()} -> std::convertible_to<bool>;
 
         {pol.get_segment_data_raw()} -> std::convertible_to<byte_t*>;
+
+        {view_a == view_b} -> std::convertible_to<bool>;
 
         {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
     };
@@ -56,6 +58,8 @@ namespace memory_policies{
             friend standard_memory_policy;
             segment_header_view_t(byte_t* segment_start, segment_id_t segment_index) : header_ptr_raw(segment_start), segment_id(segment_index){}
         public:
+            bool operator==(segment_header_view_t other)const { return this->header_ptr_raw == other.header_ptr_raw; }
+
             segment_id_t get_next_segment_id() { return get_header()->next_segment; }
             void set_next_segment_id(segment_id_t value) { get_header()->next_segment = (byte_t)(value); }
             segment_id_t get_last_segment_id(){ return get_header()->last_segment; }
