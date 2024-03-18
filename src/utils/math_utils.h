@@ -3,17 +3,12 @@
 
 #include<cstddef>
 
-namespace math{
+namespace markussecundus::utils::math{
 
     template<std::convertible_to<std::int64_t> TNumber>
     TNumber divide_round_up(TNumber a, TNumber divider){
         return a / divider + !!(a % divider);
     }
-
-
-
-
-
 
 
 }

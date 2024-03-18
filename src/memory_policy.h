@@ -3,7 +3,7 @@
 
 #include "basic_definitions.h"
 
-namespace memory_policies{
+namespace markussecundus::queue_pooling::memory_policies{
         
     template<typename THeaderView>
     concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer, THeaderView view_a, THeaderView view_b)

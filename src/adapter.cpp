@@ -2,7 +2,8 @@
 
 #include "queue_pool.h"
 
-using namespace queue_pooling;
+using namespace markussecundus::queue_pooling;
+using namespace markussecundus::queue_pooling::memory_policies;
 
 /// <summary>
 /// Size in bytes of the buffer used by the queue pool.

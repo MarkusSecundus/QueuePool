@@ -2,7 +2,7 @@
 #define LINKED_LIST_quard___fdsnjfdnskifds498dfs465fds465nhgk
 
 
-namespace linked_lists{
+namespace markussecundus::utils::linked_lists{
 
     template<typename TAccessPolicy, typename TNode>
     concept linked_list_manipulator_access_policy = requires(TAccessPolicy pol, TNode a, TNode b)

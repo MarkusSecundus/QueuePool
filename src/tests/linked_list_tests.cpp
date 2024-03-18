@@ -8,7 +8,7 @@
 
 
 
-using namespace linked_lists;
+using namespace markussecundus::utils::linked_lists;
 
 
 namespace tests {

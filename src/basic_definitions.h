@@ -5,16 +5,17 @@
 #include<cstddef>
 #include<exception>
 
-#include "utils/math_utils.h"
-
-using byte_t = unsigned char;
-using buffersize_t = std::size_t;
-using segment_id_t = std::uint32_t;
+namespace markussecundus::queue_pooling {
 
 
-#define dbg(...) ((void)(std::cout << __VA_ARGS__))
+	using byte_t = unsigned char;
+	using buffersize_t = std::size_t;
+	using segment_id_t = std::uint32_t;
 
 
+	#define dbg(...) ((void)(std::cout << __VA_ARGS__))
 
+
+}
 
 #endif

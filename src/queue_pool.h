@@ -10,9 +10,9 @@
 
 
 
-namespace queue_pooling{
-    using namespace linked_lists;
-    using namespace memory_policies;
+namespace markussecundus::queue_pooling{
+    using namespace markussecundus::utils;
+    using namespace markussecundus::queue_pooling::memory_policies;
 
 
 
@@ -143,7 +143,7 @@ private:
     private:
         queue_pool_t* pool;
     };
-    auto ll() { return linked_list_manipulator_t<header_view_t, header_linked_list_access_policy>(this); };
+    auto ll() { return linked_lists::linked_list_manipulator_t<header_view_t, header_linked_list_access_policy>(this); };
 
 #pragma endregion
 

@@ -6,7 +6,8 @@
 
 #include "../queue_pool.h"
 
-using namespace queue_pooling;
+using namespace markussecundus::queue_pooling;
+using namespace markussecundus::queue_pooling::memory_policies;
 
 
 #include<array>

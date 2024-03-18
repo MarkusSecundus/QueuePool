@@ -1,15 +1,6 @@
 #include <ctime>
 
 #include "tests/tests.h"
-using namespace tests;
-
-
-#include "queue_pool.h"
-using namespace queue_pooling;
-#include "utils/linked_list.h"
-using namespace linked_lists;
-#include "memory_policy.h"
-using namespace memory_policies;
 
 extern void main2();
 
