@@ -18,6 +18,7 @@ template<memory_policy TMemoryPolicy=standard_memory_policy>
 class queue_pool_t : private TMemoryPolicy{
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
+    using packed_segment_id_t = TMemoryPolicy::packed_segment_id_t;
     struct queue_handle_t {
         queue_handle_t() : queue_handle_t(uninitialized().get_segment_id()) {}
         queue_handle_t(segment_id_t segment_id_) :segment_id(segment_id_) {}
@@ -90,24 +91,26 @@ private:
     bool use_multiblock_segments;
 
 
-    byte_t* get_buffer() { return buffer_raw_; }
-    //buffersize_t get_buffer_size() { return buffer_size_raw; }
+    packed_segment_id_t* get_free_list_id_ptr_() { return reinterpret_cast<packed_segment_id_t*>(buffer_raw_); }
+    byte_t* get_buffer() { return buffer_raw_ + sizeof(packed_segment_id_t); }
     buffersize_t get_allocatable_buffer_size() { return get_blocks_count() * get_block_size_bytes(); }
 
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_block_size_bytes()]); }
-    segment_id_t get_blocks_count() { return std::min<segment_id_t>(TMemoryPolicy::get_addressable_blocks_count() - queue_handle_t::SPECIAL_VALUES_COUNT, (segment_id_t)buffer_size_raw_ / get_block_size_bytes()); }
+    segment_id_t get_blocks_count() { return std::min<segment_id_t>(
+        TMemoryPolicy::get_addressable_blocks_count() - queue_handle_t::SPECIAL_VALUES_COUNT, 
+        (segment_id_t)(buffer_size_raw_ - sizeof(packed_segment_id_t)) / get_block_size_bytes()); 
+    }
 
     header_view_t get_header(segment_id_t segment_index) {
         if (segment_index < 0 || segment_index >= get_blocks_count() || !queue_handle_t(segment_index).is_valid() ) return header_view_t::invalid();
         return TMemoryPolicy::make_header_view(get_segment_start(segment_index), segment_index);
     }
+
+
+
     void join_segments_into_free_list(header_view_t list_head, header_view_t free_list_cached) {
         set_free_list(ll().insert_list(free_list_cached, list_head));
     }
-
-
-    segment_id_t free_list_id___ = 0;
-    segment_id_t* get_free_list_id_ptr_() { return &free_list_id___; }
     header_view_t get_free_list(){
         header_view_t ret = get_header(*get_free_list_id_ptr_());
         if (ret.is_valid() && ret.get_is_free_segment()) return ret;

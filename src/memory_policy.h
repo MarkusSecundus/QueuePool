@@ -42,11 +42,13 @@ namespace memory_policies{
         {pol.get_addressable_blocks_count()} -> std::convertible_to<segment_id_t>;
         {pol.make_header_view(byteptr, segment_id)} -> std::convertible_to<typename THeaderPolicy::segment_header_view_t>;
     }
+    && std::convertible_to<typename THeaderPolicy::packed_segment_id_t, typename THeaderPolicy::segment_id_t>
     && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
 
 
     struct standard_memory_policy {
     public:
+        using packed_segment_id_t = std::uint8_t;
         using segment_id_t = std::uint16_t;
 
         struct segment_header_view_t {
@@ -150,7 +152,6 @@ namespace memory_policies{
         buffersize_t get_block_size_bytes() { return block_size; }
         static constexpr segment_id_t get_addressable_blocks_count() { return 256; }
         segment_header_view_t make_header_view(byte_t* segment_start, segment_id_t segment_index) { return segment_header_view_t(segment_start, segment_index); }
-
 
     private:
         buffersize_t block_size;
