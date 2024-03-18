@@ -11,7 +11,12 @@ using namespace linked_lists;
 #include "memory_policy.h"
 using namespace memory_policies;
 
+extern void main2();
+
 int main(){
+
+    main2();
+
 
     std::srand(std::time(nullptr));
 
@@ -24,7 +29,7 @@ int main(){
     //tests::QueuePoolTest{}.test_enqueue_dequeue1();
     //tests::QueuePoolTest{}.test_enqueue2with_destroy();
     //tests::QueuePoolTest{}.test_queue_randomized();
-    tests::QueuePoolTest{}.test_queue_randomized_with_destroy();
+    //tests::QueuePoolTest{}.test_queue_randomized_with_destroy();
     //tests::ll_randomized_test();
 
 

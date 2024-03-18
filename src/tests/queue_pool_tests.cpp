@@ -238,7 +238,7 @@ namespace tests{
 
             byte_t buffer[BUFFER_SIZE];
             pool_t pool(buffer, BUFFER_SIZE, BIG_SEGMENTS, BLOCK_SIZE);
-            
+            pool.init();
 
 
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
@@ -311,6 +311,7 @@ namespace tests{
 
             byte_t buffer[BUFFER_SIZE];
             pool_t pool(buffer, BUFFER_SIZE, BIG_SEGMENTS, 20);
+            pool.init();
             
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
             std::array<typename std::deque<byte_t>, QUEUES_COUNT> std_queues{};

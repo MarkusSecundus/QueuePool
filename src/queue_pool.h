@@ -14,22 +14,29 @@ namespace queue_pooling{
     using namespace memory_policies;
 
 
+
 template<memory_policy TMemoryPolicy=standard_memory_policy>
 class queue_pool_t : private TMemoryPolicy{
 public:
+    
     using segment_id_t = TMemoryPolicy::segment_id_t;
     using packed_segment_id_t = TMemoryPolicy::packed_segment_id_t;
+
     struct queue_handle_t {
+
         queue_handle_t() : queue_handle_t(uninitialized().get_segment_id()) {}
         queue_handle_t(segment_id_t segment_id_) :segment_id(segment_id_) {}
-        static constexpr queue_handle_t from_header(typename queue_pool_t::header_view_t h) { return !h.is_valid() ? queue_handle_t::empty(): queue_handle_t(h.get_segment_id()); }
+
+        static constexpr queue_handle_t from_header(typename queue_pool_t::header_view_t h) {
+            return h.is_valid() ? queue_handle_t(h.get_segment_id()) : queue_handle_t::error();
+        }
+
 
         segment_id_t get_segment_id()const { return segment_id; }
 
         static constexpr queue_handle_t uninitialized() { return queue_handle_t(~0); }
-        static constexpr queue_handle_t error() { return queue_handle_t(~0); }
+        static constexpr queue_handle_t error() { return empty(); }
         static constexpr queue_handle_t empty() { return queue_handle_t((segment_id_t)(std::size_t)(~0) - 1); }
-
 
         bool is_uninitialized() { return segment_id == uninitialized().segment_id; }
         bool is_empty() { return segment_id == empty().segment_id; }
@@ -45,9 +52,11 @@ public:
         , buffer(reinterpret_cast<buffer_view_t*>(buffer_))
         , buffer_size(buffer_size_ - sizeof(buffer_view_t::header))
         , use_multiblock_segments(use_multiblock_segments_) 
-        {
-            buffer->header.free_list = init_free_list();
-        }
+        {}
+
+    void init(){
+        buffer->header.free_list = init_free_list();
+    }
 
     queue_handle_t make_queue() {
         return queue_handle_t::empty();
@@ -177,9 +186,10 @@ private:
                 set_free_list(next_free_segment);
             }
         }
-        else { //`free_list_remaining_blocks > 1` --> we want to steal just the 1st block of this big freelist segment
-            //subtract 1 block's worth of data from the total freelist length 
-            // -> make it so that the segment's data actually starts at the beginning of the next block
+        else { //`free_list_remaining_blocks > 1` 
+            // we want to steal just the 1st block of this big freelist segment
+            // subtract 1 block's worth of data from the total freelist length 
+            // and make it so that the segment's data actually starts at the beginning of the next block
             free_list.set_segment_begin(get_block_size_bytes());
             free_list.set_segment_length(free_list.get_segment_length() - get_block_size_bytes());
             set_free_list(trim_segment_from_left(free_list));
@@ -258,7 +268,7 @@ private:
         auto queue_tail = ll().last(*queue_head);
 
         if (get_blocks_count_of_segment(queue_tail) == get_blocks_count_of_segment(queue_tail, +1)) {
-            //there is still enough place for on 
+            //there is free space for one more byte
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
             return true;
         }
