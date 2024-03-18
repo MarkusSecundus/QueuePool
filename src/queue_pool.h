@@ -39,11 +39,15 @@ public:
         segment_id_t segment_id;
     };
 
-
     template<typename ...Args>
-    queue_pool_t(byte_t* buffer, buffersize_t buffer_size, bool use_multiblock_segments_, Args ...args) : TMemoryPolicy(args...),  buffer_raw_(buffer), buffer_size_raw_(buffer_size), use_multiblock_segments(use_multiblock_segments_) {
-        *get_free_list_id_ptr_() = init_free_list();
-    }
+    queue_pool_t(byte_t* buffer_, buffersize_t buffer_size_, bool use_multiblock_segments_, Args ...args) 
+        : TMemoryPolicy(args...)
+        , buffer(reinterpret_cast<buffer_view_t*>(buffer_))
+        , buffer_size(buffer_size_ - sizeof(buffer_view_t::header))
+        , use_multiblock_segments(use_multiblock_segments_) 
+        {
+            buffer->header.free_list = init_free_list();
+        }
 
     queue_handle_t make_queue() {
         return queue_handle_t::empty();
@@ -82,23 +86,28 @@ public:
 
 
 private:
+    struct buffer_view_t {
+        struct header_t {
+            packed_segment_id_t free_list;
+        } header;
+        byte_t data[];
+    };
+
     using header_view_t = typename TMemoryPolicy::segment_header_view_t;
     constexpr buffersize_t get_block_size_bytes() { return TMemoryPolicy::get_block_size_bytes(); }
     buffersize_t get_header_size_bytes(){return TMemoryPolicy::get_header_size_bytes();}
 
-    byte_t* buffer_raw_;
-    buffersize_t buffer_size_raw_;
+    buffer_view_t *buffer;
+    buffersize_t buffer_size;
     bool use_multiblock_segments;
 
 
-    packed_segment_id_t* get_free_list_id_ptr_() { return reinterpret_cast<packed_segment_id_t*>(buffer_raw_); }
-    byte_t* get_buffer() { return buffer_raw_ + sizeof(packed_segment_id_t); }
     buffersize_t get_allocatable_buffer_size() { return get_blocks_count() * get_block_size_bytes(); }
 
-    byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_block_size_bytes()]); }
+    byte_t* get_segment_start(segment_id_t segment_index) { return &(buffer->data[segment_index * get_block_size_bytes()]); }
     segment_id_t get_blocks_count() { return std::min<segment_id_t>(
         TMemoryPolicy::get_addressable_blocks_count() - queue_handle_t::SPECIAL_VALUES_COUNT, 
-        (segment_id_t)(buffer_size_raw_ - sizeof(packed_segment_id_t)) / get_block_size_bytes()); 
+        (segment_id_t)(buffer_size) / get_block_size_bytes()); 
     }
 
     header_view_t get_header(segment_id_t segment_index) {
@@ -112,15 +121,15 @@ private:
         set_free_list(ll().insert_list(free_list_cached, list_head));
     }
     header_view_t get_free_list(){
-        header_view_t ret = get_header(*get_free_list_id_ptr_());
+        header_view_t ret = get_header(buffer->header.free_list);
         if (ret.is_valid() && ret.get_is_free_segment()) return ret;
         else return header_view_t::invalid();
     }
     void set_free_list(header_view_t h) {
         if (h.is_valid() && h.get_is_free_segment())
-            *get_free_list_id_ptr_() = h.get_segment_id();
+            buffer->header.free_list = h.get_segment_id();
         else
-            *get_free_list_id_ptr_() = 0;
+            buffer->header.free_list = 0;
     }
 
     segment_id_t init_free_list() {
@@ -135,7 +144,6 @@ private:
     header_view_t alloc_segment_from_free_list(header_view_t free_list) {
         if (!free_list.is_valid() || !free_list.get_is_free_segment())
             return header_view_t::invalid();
-
 
         auto ret = free_list;
         auto free_list_remaining_blocks = get_blocks_count_of_segment(free_list);
