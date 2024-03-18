@@ -6,7 +6,7 @@ using namespace tests;
 
 #include "queue_pool.h"
 using namespace queue_pooling;
-#include "linked_list.h"
+#include "utils/linked_list.h"
 using namespace linked_lists;
 #include "memory_policy.h"
 using namespace memory_policies;

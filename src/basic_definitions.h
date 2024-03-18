@@ -5,7 +5,7 @@
 #include<cstddef>
 #include<exception>
 
-#include "math_utils.h"
+#include "utils/math_utils.h"
 
 using byte_t = unsigned char;
 using buffersize_t = std::size_t;

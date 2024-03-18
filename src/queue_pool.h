@@ -4,7 +4,8 @@
 #include<algorithm>
 
 #include "basic_definitions.h"
-#include "linked_list.h"
+#include "utils/linked_list.h"
+#include "utils/math_utils.h"
 #include "memory_policy.h"
 
 
