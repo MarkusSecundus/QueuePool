@@ -314,7 +314,7 @@ private:
             init_free_list_segment(queue_head);
             set_free_list(ll().prepend_list(get_free_list(), queue_head));
         }
-        else if(false){
+        else{
             auto shrinked = trim_segment_from_left(queue_head);
             *out_queue_head = shrinked;
             if (shrinked != queue_head) {

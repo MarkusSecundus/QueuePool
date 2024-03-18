@@ -87,7 +87,6 @@ namespace tests{
         std::cout << "handles... empty: "<< (int)pool_t::queue_handle_t::empty().get_segment_id() <<", invalid: "<< (int)pool_t::queue_handle_t::uninitialized().get_segment_id()<<"\n";
 
         auto q = pool.make_queue();
-        byte_t byte;
         auto header = pool.get_header(q.get_segment_id());
         std::cout << pool.try_grow_queue_by_1(&header) <<"\n";
     }
@@ -214,7 +213,6 @@ namespace tests{
         //printout_buffer(std::cout, buffer, BUFFER_SIZE, BLOCK_SIZE);
         i = 0;
         for (byte_t b = 0; pool.try_dequeue_byte(&q, &b); ++i) {
-            byte_t* bb;
             std::cout << i << "... "<< (int)b << "\n";
         }
 

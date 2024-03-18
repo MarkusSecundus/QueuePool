@@ -46,8 +46,6 @@ namespace linked_lists{
                 return n;
 
             TNode n_next = p::get_next(n);
-            TNode n_last = p::get_last(n);
-            TNode to_append_next = p::get_next(to_append);
             TNode to_append_last = p::get_last(to_append);
 
             p::set_next(n, to_append);
@@ -99,7 +97,7 @@ namespace linked_lists{
 
         std::size_t length(TNode a) {
             std::size_t ret = 0;
-            for_each(a, [&](TNode n) {++ret; });
+            for_each(a, [&](TNode _) {(void)_; ++ret; });
             return ret;
         }
 

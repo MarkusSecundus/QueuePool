@@ -98,7 +98,6 @@ namespace memory_policies{
                 auto packed = get_header();
                 return packed->segment_length_lower | (packed->segment_length_upper << 8);
             }
-            //buffersize_t get_segment_end() {return get_segment_begin() + get_segment_length()-1;}
 
             void set_segment_length(buffersize_t value) {
                 auto packed = get_header();

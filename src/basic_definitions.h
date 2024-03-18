@@ -1,11 +1,6 @@
 #ifndef BASIC_DEFINITIONS__guard____fdhsiugfdg4gd894gv65fds46f5s496f5sd6
 #define BASIC_DEFINITIONS__guard____fdhsiugfdg4gd894gv65fds46f5s496f5sd6
 
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
-#pragma GCC diagnostic ignored "-Wunknown-pragmas"
-
 #include<iostream>
 #include<cstddef>
 #include<exception>
