@@ -20,8 +20,6 @@ namespace markussecundus::queue_pooling::memory_policies{
         {pol.get_segment_length()} -> std::convertible_to<buffersize_t>;
         {pol.set_segment_length(buffersize)} -> std::convertible_to<void>;
 
-        //{pol.get_segment_end()} -> std::convertible_to<buffersize_t>;
-
         {pol.get_is_free_segment()} -> std::convertible_to<bool>;
         {pol.set_is_free_segment(flag)} -> std::convertible_to<void>;
 
@@ -126,6 +124,7 @@ namespace markussecundus::queue_pooling::memory_policies{
                 first_byte_t first_byte; //according to C spec, first field must always be put at the beginning of the struct
                 byte_t bits_8_to_15;
             };
+            //for some reason GCC doesn't accept the expressions in these two asserts as constexpr (even though MSVC does)
             //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->first_byte)) == 0, "For some reason the compiler doesn't put the first_byte part of long_segment_begin_info_t to its beginning even though it should according to C spec");
             //static_assert((std::intptr_t)(&(((long_segment_begin_info_t*)0)->bits_8_to_15)) == 1, "For some reason the compiler doesn't put the bits_8_to_15 part of long_segment_begin_info_t into its 2nd byte");
             static_assert(sizeof(typename long_segment_begin_info_t::first_byte_t) == 1, "Long segment begin info must have an exactly 1 byte header");
@@ -153,7 +152,7 @@ namespace markussecundus::queue_pooling::memory_policies{
 
         static constexpr buffersize_t get_header_size_bytes() { return sizeof(typename segment_header_view_t::packed_header_t); }
         buffersize_t get_block_size_bytes() { return block_size; }
-        static constexpr segment_id_t get_addressable_blocks_count() { return 256; }
+        static constexpr segment_id_t get_addressable_blocks_count() { return 1<<8; }
         segment_header_view_t make_header_view(byte_t* segment_start, segment_id_t segment_index) { return segment_header_view_t(segment_start, segment_index); }
 
     private:
