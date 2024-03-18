@@ -1,23 +1,21 @@
 #ifndef QUEUE_POOL__guard___fds4g89dfv46ds51d6a4d9as4d6sagr
 #define QUEUE_POOL__guard___fds4g89dfv46ds51d6a4d9as4d6sagr
 
+#include<algorithm>
 
 #include "basic_definitions.h"
 #include "linked_list.h"
-using namespace linked_lists;
 #include "memory_policy.h"
-using namespace memory_policies;
 
 
 
 namespace queue_pooling{
-
-
+    using namespace linked_lists;
+    using namespace memory_policies;
 
 
 template<memory_policy TMemoryPolicy=standard_memory_policy>
 class queue_pool_t : private TMemoryPolicy{
-
 public:
     using segment_id_t = TMemoryPolicy::segment_id_t;
     struct queue_handle_t {
@@ -35,7 +33,7 @@ public:
         bool is_uninitialized() { return segment_id == uninitialized().segment_id; }
         bool is_empty() { return segment_id == empty().segment_id; }
         bool is_valid() { return !(is_empty() || is_uninitialized()); }
-
+        static constexpr segment_id_t SPECIAL_VALUES_COUNT = 2;
     private:
         segment_id_t segment_id;
     };
@@ -43,8 +41,6 @@ public:
 
     template<typename ...Args>
     queue_pool_t(byte_t* buffer, buffersize_t buffer_size, bool use_multiblock_segments_, Args ...args) : TMemoryPolicy(args...),  buffer_raw_(buffer), buffer_size_raw_(buffer_size), use_multiblock_segments(use_multiblock_segments_) {
-        if (buffer_size > TMemoryPolicy::get_max_addresable_memory_bytes())
-            throw std::runtime_error("buffer is too big!");
         *get_free_list_id_ptr_() = init_free_list();
     }
 
@@ -96,13 +92,13 @@ private:
 
     byte_t* get_buffer() { return buffer_raw_; }
     //buffersize_t get_buffer_size() { return buffer_size_raw; }
-    buffersize_t get_allocatable_buffer_size() { return get_max_segment_id() * get_block_size_bytes(); }
+    buffersize_t get_allocatable_buffer_size() { return get_blocks_count() * get_block_size_bytes(); }
 
     byte_t* get_segment_start(segment_id_t segment_index) { return &(get_buffer()[segment_index * get_block_size_bytes()]); }
-    segment_id_t get_max_segment_id() { return (segment_id_t)(buffer_size_raw_ / get_block_size_bytes()); }
+    segment_id_t get_blocks_count() { return std::min<segment_id_t>(TMemoryPolicy::get_addressable_blocks_count() - queue_handle_t::SPECIAL_VALUES_COUNT, (segment_id_t)buffer_size_raw_ / get_block_size_bytes()); }
 
     header_view_t get_header(segment_id_t segment_index) {
-        if (segment_index < 0 || segment_index >= get_max_segment_id() || !queue_handle_t(segment_index).is_valid() ) return header_view_t::invalid();
+        if (segment_index < 0 || segment_index >= get_blocks_count() || !queue_handle_t(segment_index).is_valid() ) return header_view_t::invalid();
         return TMemoryPolicy::make_header_view(get_segment_start(segment_index), segment_index);
     }
     void join_segments_into_free_list(header_view_t list_head, header_view_t free_list_cached) {
@@ -134,8 +130,7 @@ private:
     }
 
     header_view_t alloc_segment_from_free_list(header_view_t free_list) {
-        //auto free_list = get_free_list();
-        if (!free_list.is_valid())
+        if (!free_list.is_valid() || !free_list.get_is_free_segment())
             return header_view_t::invalid();
 
 
@@ -176,7 +171,7 @@ private:
             return h;
         int bytes_count = segments_count * get_block_size_bytes();
 
-        auto _dbg__max_segment_id = get_max_segment_id();
+        auto _dbg__max_segment_id = get_blocks_count();
         auto next_part_of_this_continuous_segment = get_header(h.get_segment_id() + segments_count);
         if (next_part_of_this_continuous_segment.is_valid()) {
             next_part_of_this_continuous_segment.set_segment_begin(begin - bytes_count);
@@ -207,7 +202,6 @@ private:
             auto ret = alloc_segment_from_free_list(get_free_list());
             if (!ret.is_valid()) return false;
             ret.set_segment_length(1);
-            //dbg_enqueue("initializing queue! " << (int)(ret.get_segment_begin() + ret.get_segment_length() + get_header_size_bytes()) << " / " << (int)get_segment_alignment() << "\n");
             *queue_head = ret;
             return true;
         }
@@ -221,7 +215,6 @@ private:
 
         if (use_multiblock_segments) {
             auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
-            dbg_enqueue("growing(" << next_block.is_valid() <<") " << (int)queue_tail.get_segment_id() << "(" << (int)get_blocks_count_of_segment(queue_tail) << ") -> " << (int)next_block.get_segment_id() << "\n");
 
             if (next_block.is_valid() && next_block.get_is_free_segment()) {
                 auto new_block = alloc_segment_from_free_list(next_block);
@@ -232,11 +225,8 @@ private:
             }
         }
         {
-            dbg_enqueue("allocating new block!\n");
             auto new_block = alloc_segment_from_free_list(get_free_list());
-            //dbg_enqueue("allocating new block(" << new_block.is_valid() << ")!...");
             if (!new_block.is_valid()) return false;
-            //dbg_enqueue("id: " << (int)new_block.get_segment_id() << ", free(" << (int)new_block.get_is_free_segment() << "), length: " << (int)new_block.get_segment_length() << "\n");
             new_block.set_segment_begin(0);
             new_block.set_segment_length(1);
             ll().insert_list(queue_tail, new_block);

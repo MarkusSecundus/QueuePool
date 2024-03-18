@@ -13,6 +13,10 @@ using namespace queue_pooling;
 #include<deque>
 
 
+
+#define WARN_MSG(msg)  "\033[93m" << msg << "\033[0m"
+#define ERR_MSG(msg)  "\033[91m" << msg << "\033[0m"
+
 namespace tests{
 
     static void printout_buffer(std::ostream& wrt, byte_t* buffer, buffersize_t buffer_size, buffersize_t block_size) {
@@ -220,15 +224,23 @@ namespace tests{
 
     struct QueuePoolTest::Helper::Helper2 {
 
-        template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE>
+        template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE, bool BIG_SEGMENTS>
         void test_queue_randomized_impl() {
-            std::cout << "\n***********************\nRANDOMIZED_TEST(buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ")\n";
+            std::cout << "\n***********************\nRANDOMIZED_TEST(big_segments=" << BIG_SEGMENTS << ", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ")\n";
+
+            int enqueue_skips = 0;
+            int enqueue_fails = 0;
+            int value_fails = 0;
+            int emptiness_fails = 0;
+
 
             using pool_t = queue_pool_t<standard_memory_policy>;
 
             byte_t buffer[BUFFER_SIZE];
-            pool_t pool(buffer, BUFFER_SIZE, false, BLOCK_SIZE);
+            pool_t pool(buffer, BUFFER_SIZE, BIG_SEGMENTS, BLOCK_SIZE);
             
+
+
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
             std::array<typename std::deque<byte_t>, QUEUES_COUNT> std_queues{};
             
@@ -243,12 +255,14 @@ namespace tests{
 
                 if (std::rand() % DEQUEUE_CHANCE) { //enqueue
                     if (std_queues[queue_index].size() >= MAX_ELEMENTS_IN_QUEUE) {
+                        ++enqueue_skips;
                         //std::cout << op_ << ")... too much stuff in queue " << queue_index << "\n";
                         continue;
                     }
                     byte_t to_enqueue = (byte_t)std::rand();
                     if (!pool.try_enqueue_byte(&(queues[queue_index]), to_enqueue)) {
-                        std::cout << op_ << ")... " << "cannot enqueue value " << (int)to_enqueue << " to queue n." << queue_index << "\n";
+                        ++enqueue_fails;
+                        //std::cout << op_ << ")... " << "cannot enqueue value " << (int)to_enqueue << " to queue n." << queue_index << "\n";
                         continue;
                     }
                     std_queues[queue_index].push_back(to_enqueue);
@@ -264,24 +278,39 @@ namespace tests{
                     }
                     bool my_empty = !pool.try_dequeue_byte(&(queues[queue_index]), &my_byte);
 
-                    if (std_empty != my_empty)
+                    if (std_empty != my_empty) {
+                        ++emptiness_fails;
                         std::cout << op_ << ")... " << "emptiness difference: std(empty=" << std_empty << "), my(empty=" << my_empty << ")\n";
-                    else if (std_byte != my_byte)
+                    }
+                    else if (std_byte != my_byte) {
+                        ++value_fails;
                         std::cout << op_ << ")... " << "value difference: std(" << (int)std_byte << "), my(" << (int)my_byte << ")\n";
+                    }
                     //else std::cout << op_ << ")... alright\n";
                 }
             }
 
+
             std::cout << "\n*TEST FINISHED!\n";
+            std::cout << "enqueue skips: " << enqueue_skips << "\n";
+            if (enqueue_fails) std::cout << WARN_MSG("!ENQUEUE FAILS: " << enqueue_fails) << "\n";
+            if (value_fails) std::cout << ERR_MSG("!VALUE FAILS: " << value_fails) << "\n";
+            if (emptiness_fails) std::cout << ERR_MSG("!EMPTINESS FAILS: " << emptiness_fails) << "\n";
         }
-        template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE, int DESTROY_CHANCE>
+        template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE, int DESTROY_CHANCE, bool BIG_SEGMENTS>
         void test_queue_randomized_with_destroy_impl() {
-            std::cout << "\n***********************\nRANDOMIZED_TEST(buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ", destroy=1/"<<DESTROY_CHANCE<< ")\n";
+            std::cout << "\n***********************\nRANDOMIZED_TEST(big_segments="<< BIG_SEGMENTS <<", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ", destroy=1/"<<DESTROY_CHANCE<< ")\n";
+
+
+            int enqueue_fails = 0;
+            int value_fails = 0;
+            int emptiness_fails = 0;
+            int enqueue_skips = 0;
 
             using pool_t = queue_pool_t<standard_memory_policy>;
 
             byte_t buffer[BUFFER_SIZE];
-            pool_t pool(buffer, BUFFER_SIZE, false, 20);
+            pool_t pool(buffer, BUFFER_SIZE, BIG_SEGMENTS, 20);
             
             std::array<typename pool_t::queue_handle_t, QUEUES_COUNT> queues{};
             std::array<typename std::deque<byte_t>, QUEUES_COUNT> std_queues{};
@@ -301,11 +330,13 @@ namespace tests{
                 }
                 else if (rand % DEQUEUE_CHANCE) { //enqueue
                     if (std_queues[queue_index].size() >= MAX_ELEMENTS_IN_QUEUE) {
+                        ++enqueue_skips;
                         //std::cout << op_ << ")... too much stuff in queue " << queue_index << "\n";
                         continue;
                     }
                     byte_t to_enqueue = (byte_t)std::rand();
                     if (!pool.try_enqueue_byte(&(queues[queue_index]), to_enqueue)) {
+                        ++enqueue_fails;
                         //std::cout << op_ << ")... " << "cannot enqueue value " << (int)to_enqueue << " to queue n." << queue_index << "\n";
                         continue;
                     }
@@ -322,15 +353,23 @@ namespace tests{
                     }
                     bool my_empty = !pool.try_dequeue_byte(&(queues[queue_index]), &my_byte);
 
-                    if (std_empty != my_empty)
+                    if (std_empty != my_empty) {
+                        ++emptiness_fails;
                         std::cout << op_ << ")... " << "emptiness difference: std(empty=" << std_empty << "), my(empty=" << my_empty << ")\n";
-                    else if (std_byte != my_byte)
+                    }
+                    else if (std_byte != my_byte) {
+                        ++value_fails;
                         std::cout << op_ << ")... " << "value difference: std(" << (int)std_byte << "), my(" << (int)my_byte << ")\n";
+                    }
                     //else std::cout << op_ << ")... alright\n";
                 }
             }
 
             std::cout << "\n*TEST FINISHED!\n";
+            std::cout << "enqueue skips: " << enqueue_skips << "\n";
+            if (enqueue_fails) std::cout << WARN_MSG("!ENQUEUE FAILS: " << enqueue_fails) << "\n";
+            if (value_fails) std::cout << ERR_MSG("!VALUE FAILS: " << value_fails) << "\n";
+            if (emptiness_fails) std::cout << ERR_MSG("!EMPTINESS FAILS: " << emptiness_fails) << "\n";
         }
 
     };
@@ -341,14 +380,23 @@ namespace tests{
 
         for (int t = 0; t < 1; ++t) {
             std::cout << t << ")... \n\n";
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<2048, 24, 15, 50000, 120, 2>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5>();
-             QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2>();
-            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<2048, 24, 15, 50000, 120, 2, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 800, 5, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 11, 5, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2, false>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5, false>();
+
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<2048, 24, 15, 50000, 120, 2, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 120, 2, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 15, 50000, 80, 5, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 24, 7, 50000, 160, 5, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 2, 50000, 350, 5, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 10, 5, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 15, 64, 50000, 16, 2, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<4096, 44, 30, 50000, 80, 5, true>();
 
 
 
@@ -360,33 +408,56 @@ namespace tests{
     void QueuePoolTest::test_queue_randomized_with_destroy() {
         std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
 
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 10>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 10>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 10, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 200, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 2000, false>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 2000, false>();
 
 
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 200>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 200>();
-
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 2000>();
-        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 2000>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 10, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 200, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 80, 5, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 7, 50000, 160, 5, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 64, 2, 50000, 800, 5, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 11, 5, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 15, 64, 50000, 16, 2, 2000, true>();
+        QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<4096, 44, 30, 50000, 80, 5, 2000, true>();
     }
 
 
