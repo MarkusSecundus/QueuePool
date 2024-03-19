@@ -104,12 +104,12 @@ public:
 
 private:
     bool is_valid_handle(Q* q) {
-        return q && !q->is_uninitialized();
+        return q && q>=buffer->header.handles && q<(buffer->header.handles + MAX_QUEUES) && !q->is_uninitialized();
     }
 
     struct buffer_view_t {
         struct header_t {
-            pool_t::queue_handle_t handles[MAX_QUEUES];
+            Q handles[MAX_QUEUES];
         } header;
         byte_t data[];
     } *buffer;
