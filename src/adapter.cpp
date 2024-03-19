@@ -59,7 +59,7 @@ public:
 
     Q* create_queue() {
         //MAX_QUEUES=64 -> this fits in a single cacheline if the compiler alligns the buffer alright -> probably doesn't make sense to optimize this further unless profiling says otherwise xD
-        //still it's pretty dumb that I even have to waste space for these handles
+        //still it's pretty dumb that I even have to waste buffer space for these handles (if just this function returned Q instead of Q*, that wouldn't be a problem)
         for (buffersize_t t = 0; t < MAX_QUEUES; ++t) {
             if (buffer->header.handles[t].is_uninitialized()) {
                 return &(buffer->header.handles[t] = pool.make_queue());
@@ -109,7 +109,7 @@ private:
 
     struct buffer_view_t {
         struct header_t {
-            std::array<typename pool_t::queue_handle_t, MAX_QUEUES> handles;
+            pool_t::queue_handle_t handles[MAX_QUEUES];
         } header;
         byte_t data[];
     } *buffer;
@@ -142,9 +142,9 @@ byte_t dequeue_byte(Q* q) { return get_global_pool_().dequeue_byte(q); }
 /// 
 /// Although anyway, it's pretty dumb that the required interface doesn't permit an `init()` function explicitly called by the user.
 /// </summary>
-struct pool_initialization_helper_t___ {
-    pool_initialization_helper_t___() { get_global_pool_().init(); }
-} pool_initialization_helper___;
+struct global_pool_initialization_helper_t___ {
+    global_pool_initialization_helper_t___() { get_global_pool_().init(); }
+} global_pool_initialization_helper___;
 
 
 void main2() {
