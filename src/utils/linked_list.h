@@ -4,6 +4,10 @@
 
 namespace markussecundus::utils::linked_lists{
 
+    /// <summary>
+    /// Defines a facade for low-level manipulation of any kind of object as a doubly linked list. 
+    /// To be used by linked_list_manipulator_t which creates cyclic linked list on top of it with provided high-level manipulation commands.
+    /// </summary>
     template<typename TAccessPolicy, typename TNode>
     concept linked_list_manipulator_access_policy = requires(TAccessPolicy pol, TNode a, TNode b)
     {
@@ -14,6 +18,7 @@ namespace markussecundus::utils::linked_lists{
         {pol.is_same_node(a, b)} ->std::convertible_to<bool>;
         {pol.is_null(a)} -> std::convertible_to<bool>;
     };
+
 
     template<typename TNode, linked_list_manipulator_access_policy<TNode> TNodeAccessPolicy>
     class linked_list_manipulator_t : private TNodeAccessPolicy {
