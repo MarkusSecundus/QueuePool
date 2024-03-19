@@ -5,47 +5,70 @@
 
 namespace markussecundus::queue_pooling::memory_policies{
         
+    /// <summary>
+    /// Contract for a view that facilitates access to fields of a segment header of a queue_pool.
+    /// </summary>
     template<typename THeaderView>
     concept header_view = requires(THeaderView pol, segment_id_t segment_id, buffersize_t buffersize, bool flag, byte_t*bytebuffer, THeaderView view_a, THeaderView view_b)
     {
+        //id of the next segment in the queue linked list
         {pol.get_next_segment_id()} -> std::convertible_to<segment_id_t>;
         {pol.set_next_segment_id(segment_id)} -> std::convertible_to<void>;
 
+        //id of the last segment in the queue linked list
         {pol.get_last_segment_id()} -> std::convertible_to<segment_id_t>;
         {pol.set_last_segment_id(segment_id)} -> std::convertible_to<void>;
 
+        //position of the byte in segment_data where actual data begins (gets incremented by dequeue)
         {pol.get_segment_begin()} -> std::convertible_to<buffersize_t>;
         {pol.set_segment_begin(buffersize)} -> std::convertible_to<void>;
 
+        //length of the data (gets incremented by enqueue, decremented by dequeue)
         {pol.get_segment_length()} -> std::convertible_to<buffersize_t>;
         {pol.set_segment_length(buffersize)} -> std::convertible_to<void>;
 
+        //whether the segment is marked as a part of the free list
         {pol.get_is_free_segment()} -> std::convertible_to<bool>;
         {pol.set_is_free_segment(flag)} -> std::convertible_to<void>;
 
+        //pointer to the beginning of segment's data (after the header ends)
         {pol.get_segment_data()} -> std::convertible_to<byte_t*>;
+        //id of the segment for debugging purposes - carried in the view itself, not in the header
         {pol.get_segment_id()} -> std::convertible_to<segment_id_t>;
+        //if the view points to a valid segment header
+        //if `false`, any read operation on the header is undefined behaviour!
         {pol.is_valid()} -> std::convertible_to<bool>;
 
-        {pol.get_segment_data_raw()} -> std::convertible_to<byte_t*>;
-
+        //if two views point to the same segment header
         {view_a == view_b} -> std::convertible_to<bool>;
 
+        //gets an invalid header_view instance
         {THeaderView::invalid()} -> std::convertible_to<THeaderView>;
     };
+    /// <summary>
+    /// Object specifying details about how memory shall be handled (block size, header encoding etc.) by a queue pool.
+    /// </summary>
     template<typename THeaderPolicy>
     concept memory_policy = 
         header_view<typename THeaderPolicy::segment_header_view_t> &&
         requires (THeaderPolicy pol, byte_t *byteptr, typename THeaderPolicy::segment_id_t segment_id){
+        //fixed ammount of bytes that needs to be reserved as header overhead
         {THeaderPolicy::get_header_size_bytes()} -> std::convertible_to<buffersize_t>;
+        //fixed ammount of bytes in a single queue block
         {pol.get_block_size_bytes()} -> std::convertible_to<buffersize_t>;
+        //how many blocks can be addressed in total considering the data types used by the header
         {pol.get_addressable_blocks_count()} -> std::convertible_to<segment_id_t>;
+        //create a header view, starting in a specified segment, displaying specified segment id
         {pol.make_header_view(byteptr, segment_id)} -> std::convertible_to<typename THeaderPolicy::segment_header_view_t>;
     }
+    //type big enough for storing segment_ids in memory (important to save as much space as possible in adapter.cpp's handle pool)
     && std::convertible_to<typename THeaderPolicy::packed_segment_id_t, typename THeaderPolicy::segment_id_t>
+    //type safe for performing arithmetics on segment_ids
     && std::convertible_to<typename THeaderPolicy::segment_id_t, segment_id_t>;
 
-
+    /// <summary>
+    /// Standard memory policy whose headers have 4 byte overhead and its block size is specified as a runtime argument.
+    /// </summary>
     struct standard_memory_policy {
     public:
         using packed_segment_id_t = std::uint8_t;
@@ -64,7 +87,11 @@ namespace markussecundus::queue_pooling::memory_policies{
             void set_last_segment_id(segment_id_t value) { get_header()->last_segment = (byte_t)(value);  }
 
             buffersize_t get_segment_begin() {
-                if (get_header()->is_full_from_begin) return 0;
+                //If data begins on position 0, we only needs 1 bit to carry that info.
+                //If it doesn't, then the byte on position 0 is free to carry 1 byte of info about where the segment begins.
+                //If 1 byte is not enough, then the byte on position 2 must also be free, so we can safely misuse it 
+                // to carry even more bits of the segment_begin number.
+                if (get_header()->is_full_from_begin) return 0; 
                 auto begin_info_extension_header_1st_byte = get_begin_info_extension_header_first_byte_only();
                 if (!begin_info_extension_header_1st_byte->is_2_byte_number)
                     return begin_info_extension_header_1st_byte->lower_7_bits;
@@ -108,9 +135,6 @@ namespace markussecundus::queue_pooling::memory_policies{
             byte_t* get_segment_data() { return reinterpret_cast<byte_t*>(header_ptr_raw) + get_header_size_bytes(); }
 
             segment_id_t get_segment_id() { return segment_id; }
-
-            byte_t* get_segment_data_raw() { return reinterpret_cast<byte_t*>(header_ptr_raw); }
-
 
             bool is_valid() { return (bool)header_ptr_raw; }
             static segment_header_view_t invalid() { return segment_header_view_t(NULL, 0); }

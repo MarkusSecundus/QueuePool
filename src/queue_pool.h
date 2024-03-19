@@ -13,8 +13,31 @@
 namespace markussecundus::queue_pooling{
     using namespace markussecundus::utils;
 
-
-
+/// <summary>
+/// Builds a collection of FIFO queues on top of a provided bytearray. Provides functionality to create/destroy a queue 
+/// and to enqueue/dequeue bytes into/from a specific queue.
+/// 
+/// Queues are implemented as linked lists of fixed-size blocks with user specified block size. 
+/// Each block has an overhead of a header - by default 4 bytes, but different encoding can be provided as template parameter.
+/// Manual tweaking of block size and header is advised to achieve the best memory efficiency in specific usecase.
+/// 
+/// 
+/// Optional optimization: 
+///     - when queue depletes space in its current block and there is a free block directly on its right, 
+///       it grows into it, saving header overhead, instead of allocating the next block that's in line in free list.
+///     - in practice doesn't seem to always perform better than not doing it - tweaking required
+///     - switchable by the use_multiblock_segments constructor argument.
+///  
+/// Performance analysis...
+///   Enqueue/dequeue and create_queue are guaranteed to finish in O(1) time. 
+///   Destroy queue must iterate through all the segments to mark them as free, thus O(n) time, albeit with quite nice constants (dependent on block size). 
+///   
+///   For future consideration: destroy_queue could be made run in O(1) time 
+///    - the linked list operation to add a queue to free_list is O(1) by itself, bottleneck is the marking of segments as free.
+///       Getting rid of it might make sense, but it would prevent us from doing the multiblock_segment optimization 
+///       (there would be no O(1) way of telling if a block directly to another block's right is a free_list block? (maybe could be done efficiently with union-find??)).
+/// </summary>
+/// <typeparam name="TMemoryPolicy">Object specifying details about how memory shall be handled (block size, header encoding etc.) by a queue pool.</typeparam>
 template<memory_policies::memory_policy TMemoryPolicy= memory_policies::standard_memory_policy>
 class queue_pool_t : private TMemoryPolicy{
 public:
@@ -30,7 +53,6 @@ public:
         static constexpr queue_handle_t from_header(typename queue_pool_t::header_view_t h) {
             return h.is_valid() ? queue_handle_t(h.get_segment_id()) : queue_handle_t::error();
         }
-
 
         segment_id_t get_segment_id()const { return segment_id; }
 
@@ -65,7 +87,8 @@ public:
 
 
     /// <summary>
-    /// Creates a new queue
+    /// Creates a new queue.
+    /// Runs in O(1) time.
     /// </summary>
     /// <returns>Handle to a new queue</returns>
     queue_handle_t make_queue() {
@@ -74,6 +97,8 @@ public:
     /// <summary>
     /// Tries to enqueue a byte into a queue. 
     /// Can fail e.g. because running out of memory.
+    /// 
+    /// Runs in O(1) time.
     /// </summary>
     /// <param name="handle_ptr">Pointer to the queue handle. Value pointed to might get updated in the process of this function.</param>
     /// <param name="to_enqueue">Byte to enqueue.</param>
@@ -89,8 +114,10 @@ public:
         return false;
     }
     /// <summary>
-    /// Tries to dequeu a byte from a queue.
+    /// Tries to dequeue a byte from a queue.
     /// Will fail if there is nothing left in the provided queue.
+    /// 
+    /// Runs in O(1) time.
     /// </summary>
     /// <param name="handle_ptr">Pointer to the queue handle. Value pointed to might get updated in the process of this function.</param>
     /// <param name="out_byte">Byte that was dequeued</param>
@@ -114,12 +141,12 @@ public:
     /// Destroys the queue and releases its resources to be used by other queues.
     /// Queue handle gets invalidated in the process.
     /// </summary>
-    /// <param name="handle_ptr">Queue to be used. Gets reset by this function to `empty`.</param>
+    /// <param name="handle_ptr">Queue to be used. Gets reset by this function to `uninitialized`.</param>
     void destroy_queue(queue_handle_t* handle_ptr)
     {
         if (!handle_ptr->is_valid())return;
         release_queue_to_freelist(get_header(handle_ptr->get_segment_id()));
-        *handle_ptr = queue_handle_t::empty();
+        *handle_ptr = queue_handle_t::uninitialized();
     }
 
 

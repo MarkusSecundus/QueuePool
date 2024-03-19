@@ -2,11 +2,10 @@
 
 #include "tests/tests.h"
 
-extern void main2();
+extern void adapter_test();
 
 int main(){
 
-    main2();
 
 
     std::srand(std::time(nullptr));
@@ -23,6 +22,8 @@ int main(){
     tests::QueuePoolTest{}.test_queue_randomized_with_destroy();
     //tests::ll_randomized_test();
 
+
+    adapter_test();
 
     return 0;
 }

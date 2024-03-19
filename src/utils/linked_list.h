@@ -113,6 +113,9 @@ namespace markussecundus::utils::linked_lists{
             return a;
         }
 
+        /// <summary>
+        /// DEPRECATED - do not use
+        /// </summary>
         void swap_nodes(TNode a, TNode b) {
             if (p::is_null(a)) return;
             if (p::is_null(b)) return;

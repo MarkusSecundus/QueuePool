@@ -225,7 +225,7 @@ namespace tests{
 
         template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE, bool BIG_SEGMENTS>
         void test_queue_randomized_impl() {
-            std::cout << "\n***********************\nRANDOMIZED_TEST(big_segments=" << BIG_SEGMENTS << ", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ")\n";
+            std::cout << "\n***********************\nRANDOMIZED_TEST_v1(big_segments=" << BIG_SEGMENTS << ", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ")\n";
 
             int enqueue_skips = 0;
             int enqueue_fails = 0;
@@ -298,7 +298,7 @@ namespace tests{
         }
         template<std::size_t BUFFER_SIZE, std::size_t BLOCK_SIZE, std::size_t QUEUES_COUNT, std::size_t OPERATIONS_COUNT, std::size_t MAX_ELEMENTS_IN_QUEUE, int DEQUEUE_CHANCE, int DESTROY_CHANCE, bool BIG_SEGMENTS>
         void test_queue_randomized_with_destroy_impl() {
-            std::cout << "\n***********************\nRANDOMIZED_TEST(big_segments="<< BIG_SEGMENTS <<", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ", destroy=1/"<<DESTROY_CHANCE<< ")\n";
+            std::cout << "\n***********************\nRANDOMIZED_TEST_v2(big_segments="<< BIG_SEGMENTS <<", buffer_size=" << BUFFER_SIZE<<", block_size="<<BLOCK_SIZE<<", queues_count="<<QUEUES_COUNT << ", ops_count="<< OPERATIONS_COUNT<<", max_elems_in_queue="<<MAX_ELEMENTS_IN_QUEUE << ", dequeue=1/"<<DEQUEUE_CHANCE << ", destroy=1/"<<DESTROY_CHANCE<< ")\n";
 
 
             int enqueue_fails = 0;
@@ -376,7 +376,7 @@ namespace tests{
 
 
     void QueuePoolTest::test_queue_randomized() {
-        std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
+        std::cout << "\n---------------------------------\nRANDOMIZED_TESTS_v1...\n";
 
         for (int t = 0; t < 1; ++t) {
             std::cout << t << ")... \n\n";
@@ -406,7 +406,7 @@ namespace tests{
 
     }
     void QueuePoolTest::test_queue_randomized_with_destroy() {
-        std::cout << "\n---------------------------------\nRANDOMIZED_TESTS...\n";
+        std::cout << "\n---------------------------------\nRANDOMIZED_TESTS_v2...\n";
 
         QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<2048, 24, 15, 50000, 120, 2, 10, false>();
         QueuePoolTest::Helper::Helper2{}.test_queue_randomized_with_destroy_impl<1920, 24, 15, 50000, 120, 2, 10, false>();

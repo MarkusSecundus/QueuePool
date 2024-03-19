@@ -147,7 +147,8 @@ struct global_pool_initialization_helper_t___ {
 } global_pool_initialization_helper___;
 
 
-void main2() {
+void adapter_test() {
+    printf("\n-----------------------------------------------------\n\n");
     Q* q0 = create_queue();
     enqueue_byte(q0, 0);
     enqueue_byte(q0, 1);
