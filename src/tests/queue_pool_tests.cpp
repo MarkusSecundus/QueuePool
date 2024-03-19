@@ -400,8 +400,8 @@ namespace tests{
 
 
 
-            //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 1, 50000, 1800, 5>();
-            //QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<64, 12, 1, 50000, 50, 5>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<1920, 64, 1, 50000, 1800, 5, true>();
+            QueuePoolTest::Helper::Helper2{}.test_queue_randomized_impl<64, 12, 1, 50000, 50, 5, true>();
         }
 
     }

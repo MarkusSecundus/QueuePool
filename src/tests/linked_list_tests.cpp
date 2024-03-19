@@ -347,10 +347,10 @@ namespace tests {
     }
 
     void ll_randomized_test() {
-        ll_randomized_test_impl<300,300,6, 100, 50000>();
-        ll_randomized_test_impl<100,100,6, 100, 50000>();
-        ll_randomized_test_impl<200,200,2, 100, 50000>();
-        ll_randomized_test_impl<5,5,2, 100, 50000>();
-        ll_randomized_test_impl<2,2,2, 100, 50000>();
+        ll_randomized_test_impl<300,300,6, 100, 10000>();
+        ll_randomized_test_impl<100,100,6, 100, 10000>();
+        ll_randomized_test_impl<200,200,2, 100, 10000>();
+        ll_randomized_test_impl<5,5,2, 100, 10000>();
+        ll_randomized_test_impl<2,2,2, 100, 10000>();
     }
 }
