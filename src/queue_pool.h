@@ -12,11 +12,10 @@
 
 namespace markussecundus::queue_pooling{
     using namespace markussecundus::utils;
-    using namespace markussecundus::queue_pooling::memory_policies;
 
 
 
-template<memory_policy TMemoryPolicy=standard_memory_policy>
+template<memory_policies::memory_policy TMemoryPolicy= memory_policies::standard_memory_policy>
 class queue_pool_t : private TMemoryPolicy{
 public:
     
@@ -47,6 +46,8 @@ public:
         packed_segment_id_t segment_id;
     };
 
+
+
     template<typename ...Args>
     queue_pool_t(byte_t* buffer_, buffersize_t buffer_size_, bool use_multiblock_segments_, Args ...args) 
         : TMemoryPolicy(args...)
@@ -55,13 +56,28 @@ public:
         , use_multiblock_segments(use_multiblock_segments_) 
         {}
 
+    /// <summary>
+    /// Initializes the pool. Should be called before it's used for the first time.
+    /// </summary>
     void init(){
         buffer->header.free_list = init_free_list();
     }
 
+
+    /// <summary>
+    /// Creates a new queue
+    /// </summary>
+    /// <returns>Handle to a new queue</returns>
     queue_handle_t make_queue() {
         return queue_handle_t::empty();
     }
+    /// <summary>
+    /// Tries to enqueue a byte into a queue. 
+    /// Can fail e.g. because running out of memory.
+    /// </summary>
+    /// <param name="handle_ptr">Pointer to the queue handle. Value pointed to might get updated in the process of this function.</param>
+    /// <param name="to_enqueue">Byte to enqueue.</param>
+    /// <returns>Whether the operation was successfull (didn't fail due to out-of-memory etc.)</returns>
     bool try_enqueue_byte(queue_handle_t* handle_ptr, byte_t to_enqueue) {
         auto head = get_header(handle_ptr->get_segment_id());
         byte_t* new_byte;
@@ -72,6 +88,13 @@ public:
         }
         return false;
     }
+    /// <summary>
+    /// Tries to dequeu a byte from a queue.
+    /// Will fail if there is nothing left in the provided queue.
+    /// </summary>
+    /// <param name="handle_ptr">Pointer to the queue handle. Value pointed to might get updated in the process of this function.</param>
+    /// <param name="out_byte">Byte that was dequeued</param>
+    /// <returns>Whether the operation was successfull (there was still something to dequeue)</returns>
     bool try_dequeue_byte(queue_handle_t* handle_ptr, byte_t* out_byte) {
         if (!handle_ptr->is_valid())
             return false;
@@ -87,6 +110,11 @@ public:
         }
         return false;
     }
+    /// <summary>
+    /// Destroys the queue and releases its resources to be used by other queues.
+    /// Queue handle gets invalidated in the process.
+    /// </summary>
+    /// <param name="handle_ptr">Queue to be used. Gets reset by this function to `empty`.</param>
     void destroy_queue(queue_handle_t* handle_ptr)
     {
         if (!handle_ptr->is_valid())return;
@@ -223,6 +251,8 @@ private:
 
 #pragma endregion
 
+#pragma region SegmentManagement
+
     header_view_t trim_segment_from_left(header_view_t segment) {
         if (!segment.is_valid()) return segment;
 
@@ -258,7 +288,7 @@ private:
     bool try_grow_queue_by_1(header_view_t* queue_head) {
         if (!queue_head) return false;
 
-        if (!queue_head->is_valid()) {
+        if (!queue_head->is_valid()) { //queue is empty - we must allocate its 1st block
             auto allocated = alloc_segment_from_free_list(get_free_list());
             if (!allocated.is_valid()) return false;
             allocated.set_segment_length(1);
@@ -269,29 +299,29 @@ private:
         auto queue_tail = ll().last(*queue_head);
 
         if (get_blocks_count_of_segment(queue_tail) == get_blocks_count_of_segment(queue_tail, +1)) {
-            //there is free space for one more byte
+            //there is still free space left in the current block
             queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
             return true;
         }
 
-        if (use_multiblock_segments) {
-            auto next_block = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
+        if (use_multiblock_segments) { //try if the next block to the right is free to use
+            auto next_block_to_right = get_header(queue_tail.get_segment_id() + get_blocks_count_of_segment(queue_tail));
 
-            if (next_block.is_valid() && next_block.get_is_free_segment()) {
-                auto new_block = alloc_segment_from_free_list(next_block);
+            if (next_block_to_right.is_valid() && next_block_to_right.get_is_free_segment()) {
+                auto new_block = alloc_segment_from_free_list(next_block_to_right);
                 if (!new_block.is_valid()) return false; //this really should not happen, but whatever
                
                 queue_tail.set_segment_length(queue_tail.get_segment_length() + 1);
                 return true;
             }
         }
-        {
-            auto new_block = alloc_segment_from_free_list(get_free_list());
-            if (!new_block.is_valid()) return false;
-            new_block.set_segment_begin(0);
-            new_block.set_segment_length(1);
-            ll().insert_list(queue_tail, new_block);
-        }
+        //get some random free block from the free_list
+        auto new_block = alloc_segment_from_free_list(get_free_list());
+        if (!new_block.is_valid()) return false;
+        new_block.set_segment_begin(0);
+        new_block.set_segment_length(1);
+        ll().insert_list(queue_tail, new_block);
+        
         return true;
     }
 
@@ -305,7 +335,8 @@ private:
         queue_head.set_segment_begin(queue_head.get_segment_begin() + 1);
         queue_head.set_segment_length(queue_head.get_segment_length() - 1);
 
-        if (queue_head.get_segment_length() <= 0) {
+        if (queue_head.get_segment_length() <= 0) { 
+            //current segment is empty -> let's destroy it
             if (ll().is_single_node(queue_head)) 
                 *out_queue_head = header_view_t::invalid();
             else 
@@ -316,9 +347,10 @@ private:
             set_free_list(ll().prepend_list(get_free_list(), queue_head));
         }
         else{
+            //let's see if any blocks from the left side can be safely freed
             auto shrinked = trim_segment_from_left(queue_head);
             *out_queue_head = shrinked;
-            if (shrinked != queue_head) {
+            if (shrinked != queue_head) { //if some blocks were freed
                 ll().init_node(queue_head);
                 queue_head.set_is_free_segment(true);
                 set_free_list(ll().prepend_list(get_free_list(), queue_head));
@@ -328,7 +360,12 @@ private:
         return true;
     }
 
-
+    /// <summary>
+    /// Gets pointer to the entry that was enqueued into the queue
+    /// </summary>
+    /// <param name="queue_head">First segment of the queue list</param>
+    /// <param name="out_byte_ptr">Out value - pointer to the last enqueued entry</param>
+    /// <returns>`true` IFF the queue is non-empty</returns>
     bool try_peak_front(header_view_t queue_head, byte_t** out_byte_ptr) {
         if (!queue_head.is_valid()) return false;
 
@@ -337,6 +374,12 @@ private:
 
         return true;
     }
+    /// <summary>
+    /// Gets pointer to the next entry that will be dequeued 
+    /// </summary>
+    /// <param name="queue_head">First segment of the queue list</param>
+    /// <param name="out_byte_ptr">Out value - pointer to the next entry to be dequeued</param>
+    /// <returns>`true` IFF the queue is non-empty</returns>
     bool try_peak_back(header_view_t queue_head, byte_t** out_byte_ptr) {
         if (!queue_head.is_valid()) return false;
 
@@ -344,11 +387,10 @@ private:
         return true;
     }
 
+#pragma endregion
 
 
-
-
-
+    //so that testing infrastructure can mess around with the internals of this class
 #ifdef QUEUE_TEST_CLASS
     friend QUEUE_TEST_CLASS;
 #endif
