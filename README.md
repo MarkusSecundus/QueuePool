@@ -1,3 +1,3 @@
 Requires C++20.  
 
-Can be built both by MSVC and GCC.
+Can be built both with MSVC and GCC.
